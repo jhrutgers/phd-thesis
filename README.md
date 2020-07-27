@@ -90,5 +90,6 @@ shows that to cope with the current trends in many-core architectures from a
 programming perspective, it is essential and feasible to inspect and adapt all
 abstractions collectively.
 
-The document is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](http://creativecommons.org/licenses/by-nc/).
+The [document](https://github.com/jhrutgers/phd-thesis/blob/master/Rutgers%20-%20Programming%20Models%20for%20Many-Core%20Architectures.pdf)
+is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licenses/by-nc/4.0/).
 
