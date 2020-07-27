@@ -1,0 +1,39 @@
+\pgfplotstableset{
+	col sep=semicolon,
+}%
+\pgfplotstableread{data/hw_ae_scale.dat}\aestats%
+\begin{tikzpicture}
+%\figureversion{tab,text}%lining}
+\begin{axis}[
+	xmin=0,
+%	xmax=16,
+	xtick={0,4,8,12,16},
+	ymin=0,
+%	ymax=310000,
+	xlabel={Number of tiles (\ie cores)},
+	ylabel={\strut Number of \acs{FPGA} resources},
+	yticklabel style={/pgf/number format/std=-1:1},
+	grid=major,
+	minor x tick num=3,
+	minor y tick num=4,
+	every axis legend/.append style={at={(1.05,.5)},anchor=west},
+	legend cell align=left,
+	scaled ticks=false,
+	width=.7\linewidth,
+]
+\addplot+[only marks] table[x index=0,y index=1] from \aestats;
+\addlegendentry{\acs{NoC} (\acsp{LUT})}
+\addplot+[only marks] table[x index=0,y index=2] from \aestats;
+\addlegendentry{\acs{NoC} (\acsp{FF})}
+\addplot+[chart color 1,no marks,thick,dashed] table[x index=0,y index=3] from \aestats;
+\addlegendentry{tiles (\acsp{LUT})}
+\addplot+[chart color 2,no marks,thick] table[x index=0,y index=4] from \aestats;
+\addlegendentry{tiles (\acsp{FF})}
+\addplot+[chart color 1,no marks,dashed] coordinates {(0,150720) (16,150720)};
+%\addlegendentry{\acs{FPGA} capacity (\acsp{LUT})}
+\path \plotlabelnode[anchor=north west,at={(axis cs:0.8,150720)}] {\strut\acs{FPGA} capacity (\acsp{LUT})};
+\addplot+[chart color 2,no marks] coordinates {(0,301440) (16,301440)};
+%\addlegendentry{\acs{FPGA} capacity (\acsp{FF})}
+\path \plotlabelnode[anchor=north west,at={(axis cs:0.8,301440)}] {\strut\acs{FPGA} capacity (\acsp{FF})};
+\end{axis}
+\end{tikzpicture}%

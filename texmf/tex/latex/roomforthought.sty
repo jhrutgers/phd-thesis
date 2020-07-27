@@ -1,0 +1,99 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{roomforthought}
+
+\newif\ifhavethoughts\havethoughtstrue
+\DeclareOption{disable}{\havethoughtsfalse}
+\ProcessOptions
+
+\RequirePackage{etex}
+\RequirePackage{etoolbox}
+
+\newif\if@thoughtsenabled\@thoughtsenabledfalse
+
+\def\enablethoughts{\@thoughtsenabledtrue}
+\def\disablethoughts{\@thoughtsenabledfalse}
+\def\outofthoughts{\disablethoughts}
+
+% you might want to redef this one
+\gdef\thoughtspagestyle{empty}
+% you might want to redef this one
+\def\thoughtintro{This empty page leaves some room for random thoughts\ifdef{\index}{\index{thoughts}}{}:\\\vspace{1ex}}
+% you might want to redef this one
+\def\setthought#1{\emph{#1}}
+
+% add a new thought
+\newcommand*{\addthought}[1]{\ifstrempty{#1}{\PackageError{roomforthought}{Empty thought}{}}{\gappto\@thoughts{{#1}}}}
+
+% keep adding the same thought when running out of others
+\newcommand*{\infinitethought}[1]{\addthought{#1}\def\outofthoughts{\addthought{#1}}}
+
+\newenvironment{thoughtroom}{%
+	\thispagestyle{\thoughtspagestyle}%
+	\mbox{}\vfill%
+	\hfill\begin{minipage}{.9\linewidth}\raggedleft\small%
+}{%
+	\end{minipage}%
+}
+
+% print thought
+\DeclareRobustCommand{\roomforthought}{%
+	\begingroup%
+		\let\@thinknext\@roomforthought%
+		\if@thoughtsenabled\else\let\@thinknext\@noroomforthought\fi%
+		\expandafter\ifstrempty\expandafter{\@thoughts}{\let\@thinknext\@noroomforthought}{}%
+		\@thinknext%
+	\endgroup%
+}
+
+\def\@noroomforthought{%
+	\thispagestyle{cleared}\mbox{}%
+}
+
+\def\@roomforthought{%
+	\begin{thoughtroom}%
+		\thoughtintro\setthought{\nextthought}%
+	\end{thoughtroom}%
+	\ifdef{\AtEndChapter}{\AtEndChapter*{\string\dropnextthought}}{}%
+}
+
+% thought helpers
+\gdef\@nomorethoughts{}
+\def\@resetthoughts{\gdef\@thoughts{}}
+\def\@saverestofthoughts#1{%
+	\let\@thinknext\relax%
+	\ifx\@nomorethoughts#1\@nomorethoughts\else%
+		\gappto\@thoughts{{#1}}%
+		\let\@thinknext\@saverestofthoughts%
+	\fi%
+	\@thinknext%
+}
+
+\def\@nextthought#1#2{%
+	#1%
+	\@resetthoughts\ifx\@nomorethoughts#2\@nomorethoughts\outofthoughts\fi%
+	\@saverestofthoughts{#2}%
+}
+
+\def\nextthought{%
+	\expandafter\@nextthought\@thoughts\@nomorethoughts\@nomorethoughts%
+}
+
+\def\@dropnextthought#1{\@resetthoughts\@saverestofthoughts}
+\def\dropnextthought{\expandafter\@dropnextthought\@thoughts\@nomorethoughts}
+
+% enable/disable when appropriate
+\ifhavethoughts
+	\preto\mainmatter{\enablethoughts}
+	\preto\appendix{\enablethoughts}
+	\preto\backmatter{\disablethoughts}
+\else
+	\def\enablethoughts{\disablethoughts}
+\fi
+
+% assume \clearpage before
+\def\cleartillversowiththought{\ifnumodd{\value{page}}{\roomforthought\clearpage}{}}
+
+\@resetthoughts
+% \mainmatter enables thoughts automatically
+\disablethoughts
+

@@ -1,0 +1,64 @@
+\begin{tikzpicture}[
+	cat/.style={inner sep=0,outer sep=0},
+	cat label/.style={minimum width=15ex,wrap text,font=\itshape,anchor=south,inner sep=0},
+	model/.style={draw,ellipse,minimum height=3em,minimum width=17ex,wrap text,max text width=13ex,inner sep=0,fontB},
+	sync/.style={model,fill=black!10},
+	dep/.style={draw,->},
+	equiv/.style={draw,densely dashed},
+]
+	% defs
+	\def\memmodelnode[#1] (#2) at (#3) #4;{
+		\node[model,#1] (#2) at (#3) {#4};
+	}
+	\newcommand{\memmodel}[1][]{\memmodelnode[#1]}
+%	
+	% uniform
+	\memmodel (ac) at (0,0) {\acl{AC}};
+	\memmodel (sc) at ($(ac)+(0,-\portablefigunit)$) {\acl{SC}};
+	\draw[dep] (ac) -- (sc);
+	\memmodel (cac) at ($(sc)+(-\portablefigunit,-\portablefigunit)$) {Causal Consistency};
+	\draw[dep] (sc) -- (cac);
+	\memmodel (pc) at ($(sc)+(\portablefigunit,-\portablefigunit)$) {\acl{PC}};
+	\draw[dep] (sc) -- (pc);
+	\memmodel (pram) at ($(pc)+(-2\portablefigunit,-\portablefigunit)$) {\acs{PRAM}};
+	\draw[dep] (pc) -- (pram);
+	\draw[dep] (cac) -- (pram);
+	\memmodel (cc) at ($(pc)+(0,-\portablefigunit)$) {\acl{CC}};
+	\draw[dep] (pc) -- (cc);
+	\memmodel (dc) at ($(cc)+(0,-\portablefigunit)$) {\acl{DC}};
+	\draw[dep] (cc) -- (dc);
+	\memmodel (slow) at ($(dc)+(-\portablefigunit,-\portablefigunit)$) {\SlowC};
+	\draw[dep] (pram) -- (slow);
+	\draw[dep] (dc) -- (slow);
+	\memmodel (local) at ($(slow)+(0,-\portablefigunit)$) {Local Consistency};
+	\draw[dep] (slow) -- (local);
+%	
+	% synchronized
+	\memmodel[sync] (wc) at ($(sc)+(3.5\portablefigunit,0)$) {\acl{WC}};
+	\draw[equiv] (sc) -- (wc);
+	\memmodel[sync] (rc) at ($(wc)+(0,-\portablefigunit)$) {\acl{RC}};
+	\draw[equiv] (pc) -- (rc);
+	\draw[dep] (wc) -- (rc);
+	\memmodel[sync] (ec) at ($(rc)+(0,-\portablefigunit)$) {\acl{EC}};
+	\draw[equiv] (pc) -- (ec);
+	\draw[dep] (rc) -- (ec);
+	\memmodel[sync] (common) at ($(ec)+(0,-\portablefigunit)$) {\textit{common}\\\acs{PMC}};
+	\draw[equiv] (pc) -- (common);
+	\draw[dep] (ec) -- (common);
+	\memmodel[sync] (gs) at ($(common)+(0,-\portablefigunit)$) {\acl{GS-LC}};
+	\draw[equiv] (cc) -- (gs);
+	\draw[dep] (common) -- (gs);
+%
+	% labels
+	\node[cat,fit={(ac) (pram) (cc) (local)}] (u) {};
+	\draw ($(u.north west)+(0,.25\portablefigunit)$) -- ($(u.north east)+(0,.25\portablefigunit)$);
+	\node[cat label] at ($(u.north)+(0,.25\portablefigunit)$) {uniform};
+	\path let \p1=(u.north), \p2=(u.south), \p3=(ec.center) in
+		node[cat,fit={(wc) (gs) (\x3,\y1) (\x3,\y2)}] (s) {};
+	\draw ($(s.north west)+(0,.25\portablefigunit)$) -- ($(s.north east)+(0,.25\portablefigunit)$);
+	\node[cat label] at ($(s.north)+(0,.25\portablefigunit)$) {synchronized};
+%	
+	\draw[<->,very thick]
+		($(u.north west)+(-.25\portablefigunit,0)$) node[anchor=north west,inner sep=0,outer ysep=0,outer xsep=1ex] {\strut strong} --
+		($(u.south west)+(-.25\portablefigunit,0)$) node[anchor=south west,inner sep=0,outer ysep=0,outer xsep=1ex] {\strut weak};
+\end{tikzpicture}%

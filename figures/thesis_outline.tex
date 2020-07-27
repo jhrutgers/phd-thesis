@@ -1,0 +1,102 @@
+\begin{chapterfig}[Thesis]
+\inputonce{figures/arch_style}
+\label{cfig:thesis}
+\setlength{\platformlayerwidth}{21ex}
+\tikzset{
+	chapter node/.style={anchor=mid east,font=\figureversion{text,tab}\itshape,outer xsep=1ex,outer ysep=0,inner sep=0},
+	platform node/.style={outer sep=0,minimum width=10em},
+	zoom/.style={draw=niceblack,densely dotted,thick,overlay},
+	chapter shade/.style={draw=nicegray,dashed},
+	software/.append style={platform node,layer fill,minimum height=1em},
+	interface/.append style={platform node,model,minimum height=1em},
+}
+
+% set of layers
+\platformlayer[padded]						(app)	{application};
+\platformlayer[model,padded]				(pm)	{programming model};
+\platformlayer[model,padded]				(moc)	{model of computation};
+\platformlayerglue[padded]					(moccm)	{parallelization tool};
+\platformlayer[model,padded]				(cm)	{concurrency model};
+\platformlayerglue[padded]					(cmmm)	{\acs{OS}, \acl{RTS}};
+\platformlayer[model,padded]				(mm)	{memory model};
+\platformlayer[padded,minimum height=5em]	(hw)	{actual hardware};
+
+% cross layers
+\crosslayerright[]	<moc.north east->			()		{platform: \Starburst};
+\crosslayerleft[]	<app.north west-mm.west>	() 		{software layers};
+\crosslayerleft[]	<mm.west->					() 		{hardware};
+
+% corresponding models in actual platform
+\begin{pgfonlayer}{deepground}
+	\platformlayersnode[interface]		<pm-moc>		+15ex () {C, C++, \lcalc};
+	\platformlayersnode[interface]		<mm-mm>			+15ex () {\acs{PMC}};
+	\platformlayersnode[interface]		<cm-cm>			+15ex (pthread) {};
+	\begin{scope}[
+			x=1em,y=1em,
+			shift={(pthread.west)},
+			thread/.style={software,no wrap text,no icon,minimum size=1em,font=\scriptsize,outer sep=.5\pgflinewidth,inner sep=0},
+	]
+		\node[thread,anchor=west] (t1) at (.6,0) {T};
+		\node[thread,anchor=center] (t2) at ($(t1.center)+(1.5,0)$) {T};
+		\node[thread,anchor=center,draw=none,fill=none,no shade] (tn) at ($(t2.center)+(1.2,0)$) {\rule[0pt]{0pt}{1.3ex}$\cdots$};
+		\node[draw=none,fill=none,minimum size=0,anchor=mid west,outer sep=1ex] at (tn.east) {Pthreads};
+%		\path[use as bounding box] (current bounding box.north east) rectangle (current bounding box.south west);
+		\path[zoom] (t1) -- +(0,-1em);
+		\path[zoom] (t2) -- +(0,-1em);
+%		\path[zoom] (tn) -- +(0,-1em);
+	\end{scope}
+\end{pgfonlayer}
+
+% corresponding software in actual platform
+\platformlayersnode[software]		<app-app>		+15ex () {\SPLASH and \NoFib};
+\platformlayersnode[software]		<moccm-moccm>	+15ex () {\ourfp};
+\platformlayersnode[software]		<cmmm-cmmm>		+15ex (os) {\Helix};
+\platformlayersnode[platform node]	<hw-hw>			+15ex (soc) {};
+\begin{scope}[
+		x=1em,y=1em,
+		shift={(soc.center)},
+		connection/.style={thick,draw},
+		component/.append style={no wrap text,font=\scriptsize,minimum size=1.25em,inner sep=0},
+		interconnect/.append style={minimum width=7em},
+		memory/.append style={minimum width=5em},
+	]
+	\node[core,anchor=south] (p1) at (-3,1) {};
+	\node[core,anchor=south] (p2) at (-1.5,1) {};
+	\node[core,anchor=south] (p3) at (0,1) {};
+	\node[core,anchor=south] (p4) at (1.5,1) {};
+	\node[plain label,anchor=south] (pn) at (3,1) {\strut$\cdots$};
+	\node[memory,anchor=north] (mem) at (0,-1) {\strut memory};
+	\path[connection] (p1.south) -- +(0,-.5);
+	\path[connection] (p2.south) -- +(0,-.5);
+	\path[connection] (p3.south) -- +(0,-.5);
+	\path[connection] (p4.south) -- +(0,-.5);
+%	\path[connection] (pn.south) -- +(0,-.5);
+	\path[connection] (mem.north) -- +(0,.5);
+	\node[interconnect,anchor=center] (noc) at (0,0) {\strut interconnect};
+	\path[zoom] (os.south west) -- (p2.north west);
+	\path[zoom] (os.south east) -- (p2.north east);
+\end{scope}
+
+% corresponding chapters
+\node[platform node,chapter node,anchor=south,minimum height=\platformlayerheight] (tr)	at (app.north)		{\strut trends};
+\platformlayersnode[chapter node]	<tr-app>		+-2ex (c2)	{\Cref{c:starburst}};
+\platformlayersnode[chapter node] 	<pm-moc>		+-2ex (c3) 	{\Cref{c:progmodel}};
+\platformlayersnode[chapter node] 	<moccm-cm>		+-2ex (c6) 	{\Cref{c:concurrency}};
+\platformlayersnode[chapter node] 	<cmmm-mm>		+-2ex (c5) 	{\Cref{c:memory}};
+\platformlayersnode[chapter node] 	<hw-hw>			+-2ex (c4) 	{\Cref{c:hardware}};
+\node[chapter node,anchor=south west,minimum height=\platformlayerheight]	at (c2.north west)	{\strut\Cref{c:introduction}};
+\node[chapter node,anchor=south,minimum height=\platformlayerheight]		at (tr.north)		{\strut introduction};
+\node[chapter node,anchor=north west,minimum height=\platformlayerheight]	at (c4.south west)	{\strut\Cref{c:conclusion}};
+\node[chapter node,anchor=north,minimum height=\platformlayerheight]		at (hw.south)		{\strut conclusion};
+
+% horizontal lines between all layers
+\begin{pgfonlayer}{background}
+	\path[chapter shade] (c2.north west) -- +(.99\linewidth,0);
+	\path[chapter shade] (c3.north west) -- +(.99\linewidth,0);
+	\path[chapter shade] (c4.north west) -- +(.99\linewidth,0);
+	\path[chapter shade] (c5.north west) -- +(.99\linewidth,0);
+	\path[chapter shade] (c6.north west) -- +(.99\linewidth,0);
+	\path[chapter shade] (c4.south west) -- +(.99\linewidth,0);
+\end{pgfonlayer}
+
+\end{chapterfig}%

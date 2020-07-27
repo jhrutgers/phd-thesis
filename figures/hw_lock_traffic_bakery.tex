@@ -1,0 +1,59 @@
+\pgfplotstableset{create on use/x/.style={create col/set list={1,0,2,0,3,0,4,0}}}%
+\input{figures/hw_lock_traffic_style}%
+\pgfplotstableread{data/hw_lock_traffic.dat}\memstats%
+\subbottom[by processing time]{%
+\begin{tikzpicture}[remember picture]
+	\path 
+		(4em,3\baselineskip) \mylegendentry{name=legends}{bar spare,name=keyspare}{spare time}
+		++(0,-\baselineskip) \mylegendentry{name=legendw}{bar write}{any write}
+		++(0,-\baselineskip) \mylegendentry{name=legenduc}{bar uncached read}{uncached read};
+	\fillpat{keyspare}
+%
+	\begin{axis}[
+		lock bar plot relative,
+		anchor=north west,
+		ylabel={\strut Distribution of time over operations (\si{\percent})},
+	]
+		\addplot[bar icache read] table[x=x,y={icache read pct}] from \memstats;
+		\addplot[bar dcache read] table[x=x,y={dcache read pct}] from \memstats;
+		\addplot[bar mutex read] table[x=x,y={mutex read pct}] from \memstats;
+		\addplot[bar uncached read] table[x=x,y={uncached read pct}] from \memstats;
+		\addplot[bar write] table[x=x,y={write pct}] from \memstats;
+		%\addplot[bar spare] table[x=x,y={spare pct}] from \memstats;
+%
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:1,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:2,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:3,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:4,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:1,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:2,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:3,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:4,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+	\end{axis}
+\end{tikzpicture}%
+\label{fig:hardware:memtraffic:bakery:time}%
+}\hfill%
+\subbottom[by memory bandwidth]{%
+\begin{tikzpicture}[remember picture]
+	\path
+		(-4em,3\baselineskip) \mylegendentry{name=legendm}{bar mutex read}{read for mutex}
+		++(0,-\baselineskip) \mylegendentry{name=legenddc}{bar dcache read}{D-cache burst read}
+		++(0,-\baselineskip) \mylegendentry{name=legendic}{bar icache read}{I-cache burst read};
+	\begin{axis}[
+		lock bar plot,
+		anchor=north west,
+		ymin=0,
+		ylabel={\strut \acs{SDRAM} bandwidth (\si{\mega\byte\per\second})},
+	]
+		\addplot[bar icache read] table[x=x,y={icache read bw}] from \memstats;
+		\addplot[bar dcache read] table[x=x,y={dcache read bw}] from \memstats;
+		\addplot[bar mutex read] table[x=x,y={mutex read bw}] from \memstats;
+		\addplot[bar uncached read] table[x=x,y={uncached heap read bw}] from \memstats;
+		\addplot[bar write] table[x=x,y={write bw}] from \memstats;
+	\end{axis}
+\end{tikzpicture}%
+\label{fig:hardware:memtraffic:bakery:bandwidth}%
+}%
+\begin{tikzpicture}[remember picture,overlay]
+	\node[legend border,fit={(legendic) (legenddc) (legendm) (legenduc) (legendw) (legends)}] {};
+\end{tikzpicture}%

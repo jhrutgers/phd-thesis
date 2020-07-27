@@ -1,0 +1,22 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{plainstring}
+
+\RequirePackage{etoolbox}
+
+% use \plainstringtrue to enforce plain strings, \plainstringfalse for TeX strings
+\newbool{plainstring}
+
+% \texorplainstring{a}{b} returns b when \plainstringtrue or in PDF-string mode, a otherwise.
+\def\texorplainstring#1#2{%
+	\ifbool{plainstring}{%
+		#2% explicitly asked for plain string
+	}{%
+		\ifdef{\texorpdfstring}{%
+			\texorpdfstring{#1}{#2}%
+		}{#1}%
+	}%
+}
+
+% all \texorplainstrings inside this environment will evaluate to the plain string
+\newenvironment{plainstring}{\plainstringtrue}{}
+

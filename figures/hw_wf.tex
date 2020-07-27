@@ -1,0 +1,149 @@
+\inputonce{figures/arch_style}%
+\begin{tikzpicture}[
+	component/.append style={minimum size=2em},
+	tile/.style={core,text width=4ex,minimum size=2.75em},
+	tree step/.style={mux,wrap text,trapezium angle=110},
+	tree buffer/.style={memory,minimum height=1.3em,inner sep=0},
+	timer/.style={component,fontB,minimum size=.875em,inner sep=0,rounded corners=0pt,no wrap text},
+	ellipse connection/.style={connection,densely dotted},
+	interconnect/.append style={inner sep=.25\portablefigunit},
+]
+
+% tiles
+\node[tile,anchor=west]		(mb0)											{$0$};
+\node[tile,anchor=west]		(mb1) at ($(mb0.east)+(.5\portablefigunit,0)$)	{$1$};
+\node[tile,anchor=west]		(mb2) at ($(mb1.east)+(.5\portablefigunit,0)$)	{$2$};
+\node[tile,anchor=west]		(mb3) at ($(mb2.east)+(.5\portablefigunit,0)$)	{$3$};
+\node[tile,anchor=west]		(mbi) at ($(mb3.east)+(.5\portablefigunit,0)$)	{$\cdots$};
+\node[tile,anchor=west]		(mbn) at ($(mbi.east)+(.5\portablefigunit,0)$)	{$\SYMcorecount-1$};
+
+% tree commands
+\def\treestep[#1] (#2) leafs (#3) and (#4);{
+	\path let \p1=(#3), \p2=(#4), \n1={(\x2-\x1)+\portablefigunit} in
+		($(\p1)!.5!(\p2)+(0,-\portablefigunit)$) node[tree step,minimum width=\n1,#1,anchor=north] (#2) {\acs{MUX}};
+	\path let \p1=(#2.bottom left corner), \p2=(#2.bottom right corner), \n1={\x2-\x1} in
+		($(\p1)!.5!(\p2)+(0,-.75\portablefigunit)$) node[tree buffer,minimum width=\n1,anchor=north] (#2 buffer) {buffer};
+	\draw[connection] (#3) -- ++(0,-\portablefigunit);
+	\draw[connection] (#4) -- ++(0,-\portablefigunit);
+	\draw[connection] (#2.south) -- (#2 buffer.north);
+	\coordinate (#2 root) at (#2 buffer.south);
+}
+
+\def\treetimer (#1) at (#2);{
+	\coordinate (#1 out) at ($(#2)+(0,-\portablefigunit)+(0,-.375em)$);
+	\draw[connection,-]
+		(#2) -- (#1 out)
+		-- +(-.5em,0)
+		+(0,0) node[joint] {}
+		++(-.5em,0)
+		node[timer,anchor=east] (#1) {T};
+}
+
+% tree
+\treetimer (timer0) at (mb0.south);
+\treetimer (timer1) at (mb1.south);
+\treestep[] (step1) leafs (timer0 out) and (timer1 out);
+\treetimer (timer2) at (mb2.south);
+\treetimer (timer3) at (mb3.south);
+\treestep[] (step2) leafs (timer2 out) and (timer3 out);
+\treestep[] (step3) leafs (step1 root) and (step2 root);
+\draw[ellipse connection] (step3 root) -- ++(0,-\portablefigunit);
+\draw[ellipse connection] (mbi.south) -- ++(0,-2.5\portablefigunit);
+\draw[ellipse connection] (mbn.south) -- ++(0,-2.5\portablefigunit);
+
+% bus
+\draw[bus] let \p1=(step3 root), \p2=(mb1.west), \p3=(mbi.east) in
+	($(\x2,\y1)+(0,-3\portablefigunit)$) coordinate (bus left) --
+	($(\x3,\y1)+(0,-3\portablefigunit)$) coordinate (bus right);
+\draw[ellipse connection,shorten >=1.5pt] ($(bus left)!.5!(bus right)$) ++(0,1\portablefigunit) coordinate (bus master) -- ++(0,-1\portablefigunit);
+\path ($(step3 root)+(0,-\portablefigunit)$) -- node[midway,plain label,sloped,anchor=mid] {$\cdots$} ($(bus left)!.5!(bus right)+(0,1\portablefigunit)$);
+\path ($(mbn.south)+(0,-2\portablefigunit)$) -- node[midway,plain label,sloped,anchor=mid] {$\cdots$} ($(bus left)!.5!(bus right)+(0,1\portablefigunit)$);
+
+% bus peripherals
+\node[memory,anchor=north] (mem) at ($(bus left)!.25!(bus right)+(0,-\portablefigunit)+(0,-1.5pt)$) {\acs{SDRAM}};
+\draw[connection] ($(mem.north)+(0,\portablefigunit)$) -- (mem.north);
+\node[peripheral,anchor=north] (periphs) at ($(bus left)!.75!(bus right)+(0,-\portablefigunit)+(0,-1.5pt)$) {peripherals};
+\draw[connection] ($(periphs.north)+(0,\portablefigunit)$) -- (periphs.north);
+
+% ring access
+\begin{scope}[
+	memory/.append style={minimum width=1em,anchor=south},
+]
+	\node[memory,minimum height=1.5em] (ring fifo) at ($(mb2.70)+(0,\portablefigunit)$) {};
+	\node[memory,minimum height=2em,anchor=south east] (ring buf) at ($(mb2.north west)+(0,1.25\portablefigunit)+(0,1.5em)$) {};
+	\node[mux,minimum width=2em,minimum height=.75em,rotate=90,anchor=top left corner,no wrap text] (ring mux) at ($(mb2.north east)+(0,1.25\portablefigunit)+(0,1.5em)$) {};
+\end{scope}% force icon drawing of fifo
+%\node[plain label,anchor=center] at (ring fifo.center) {\begin{landscape*}\strut\acs{FIFO}\end{landscape*}};
+%\node[plain label,anchor=center] at (ring buf.center) {\begin{landscape*}\strut buf\end{landscape*}};
+\draw[connection] (mb2.70) -- (ring fifo.south);
+\draw[connection] (ring fifo.north) |- (ring mux.north west);
+\draw[connection] (ring buf.east) -| (mb2.110);
+\path let \p1=(ring buf.east), \p2=(mb2.110) in (\x2,\y1) coordinate (ring joint);
+\draw[connection] (ring joint) |- (ring mux.north east);
+\node[joint] at (ring joint) {};
+\draw[connection] (ring mux.south) -- ++(\portablefigunit,0);
+\draw[connection] (ring buf.west) ++(-\portablefigunit,0) -- (ring buf.west);
+\begin{pgfonlayer}{background}
+	\begin{scope}[
+		connection/.append style={nicegray,rounded corners=1ex,densely dotted},
+	]
+	\draw[connection,-]
+		let \p1=(mbn.east), \p2=(mb0.west), \p3=(ring mux.south), \p4=(ring buf.east) in
+		(ring mux.south)+(\portablefigunit,0)
+		-- (\x1,\y3)
+		-- ++(0,1.5\portablefigunit) coordinate (ring north east)
+		-- ($(\x2,\y3)+(0,1.5\portablefigunit)$)
+		-- ++(0,-1.5\portablefigunit)
+		-- ($(ring buf.west)+(-\portablefigunit,0)$)
+		($(\x2,\y4)+(0,.75\portablefigunit)$) coordinate (ring west);
+	\foreach \mb in {mb0,mb1,mb3,mbi,mbn}
+		\draw[connection,latex-latex] let \p1=(\mb.north), \p2=(ring mux.south) in (\p1) -- (\x1,\y2);
+	\end{scope}
+\end{pgfonlayer}
+
+% labels
+\path let \p1=(current bounding box.west), \p2=(current bounding box.east), \n1={\linewidth-(\x2-\x1)-1.5\portablefigunit} in
+	\pgfextra{\xdef\remaininglinewidth{\n1}};
+\begin{scope}[
+	label/.style={plain label,fontB,text width=\remaininglinewidth,text ragged left},
+	label pin/.style={draw=niceblack,thin,rounded corners=0pt},
+]
+	\def\addlabel at (#1) #2;{
+		\path
+			let \p1=(mb0.west), \p2=(#1) in
+			(\x1,\y2) ++(-\portablefigunit,0) node[label,anchor=east] {#2};
+	}
+	\def\addpinnedlabelright (#1) +(#2) #3;{
+		\draw[label pin,shorten <=.25ex]
+			let \p1=($(#1)+(#2)+(1\portablefigunit,0)$), \p2=(current bounding box.east), \n1={\x2-\x1} in
+			(#1) -- ++($(#2)+(.2\portablefigunit,0)$) -- ++(.5\portablefigunit,0)
+			node[label,text ragged right,text width=\n1,anchor=west,outer sep=.5ex] {#3};
+	}
+	\def\addpinnedlabelleft (#1) +(#2) #3;{
+		\draw[label pin,shorten <=.25ex]
+			let \p1=($(#1)+(#2)+(-1\portablefigunit,0)$), \p2=(current bounding box.west), \n1={\x1-\x2} in
+			(#1) -- ++($(#2)+(-.2\portablefigunit,0)$) -- ++(-.5\portablefigunit,0)
+			node[label,text ragged left,text width=\n1,anchor=east,outer sep=.5ex] {#3};
+	}
+	\addlabel at (mb0) {tiles generating read/write packets};
+	\addlabel at (timer1) {add timestamp to packet header};
+	\addlabel at (step1) {arbitrate packets based on earliest timestamp};
+	\addlabel at (step1 buffer) {(optional) buffer after arbitration point};
+	\addlabel at (step3) {binary arbitration tree};
+	\addlabel at (step3 buffer) {$\vdots$};
+	\addlabel at (bus left) {single-master bus, mainly for memory traffic};
+	\addlabel at (ring west) {inter-core communication ring, processing messages containing a single address--data pair};
+	\addpinnedlabelright (ring mux.east) +(0,2.1em) {prioritize forwarding messages on the ring};
+	\addpinnedlabelright (ring fifo.100) +(0,6.1em) {small \acs{FIFO}};
+	\addpinnedlabelleft (ring joint) +(0,4.95em) {leave ring if the address matches the local memory};
+	\addpinnedlabelleft (ring buf.north) +(0,2.5em) {one register between cores};
+\end{scope}
+
+% interconnect grouping node
+\begin{pgfonlayer}{deepground}
+	\path let \p1=(mbn.south east), \p2=(timer0.north) in (\x1,\y2) coordinate (tree fit right);
+	\node[interconnect,fit={(timer0) (bus master) (tree fit right) ($(bus left)+(0,-1.5pt)$)}] (tree interconnect) {};
+	\node[interconnect,fit={(ring west) (ring north east) (ring fifo.south)}] (ring interconnect) {};
+\end{pgfonlayer}
+
+\end{tikzpicture}%

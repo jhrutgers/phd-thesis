@@ -1,0 +1,320 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{portablefig}
+
+\newif\ifstandalonefig\standalonefigfalse
+\DeclareOption{standalone}{\standalonefigtrue}
+\ProcessOptions
+
+\RequirePackage{etex}
+\RequirePackage{tikz}
+\RequirePackage{environ}
+\RequirePackage{xargs}
+\RequirePackage{ifempty}
+\RequirePackage{scalefnt}
+\RequirePackage{etoolbox}
+\RequirePackage{wordfonts}
+\RequirePackage{tikzcontour}
+
+\pgfsetlayers{deepground,background,main,foreground}
+
+% define lrbox* env that makes the assignment of the box global
+\cslet{lrbox*}\lrbox
+\expandafter\patchcmd\csname lrbox*\endcsname{\setbox}{\global\setbox}{}{}
+%\expandafter\show\csname lrbox*\endcsname % uncomment to see if it has worked
+\cslet{endlrbox*}\endlrbox
+
+\newlength{\portablefigunit}
+
+\providecommand{\inputonce}[1]{\expandafter\ifx\csname included #1\endcsname\relax\expandafter\def\csname included #1\endcsname{}\input{#1}\fi}
+
+% center all floats automatically
+\g@addto@macro\@floatboxreset\centering
+
+\newenvironment{portablefig}[1][]{%
+	\ignorespaces%
+	\ifstandalonefig\thispagestyle{empty}\fi%
+	\normalfont\normalsize%
+	\portablefigset{every portable fig,#1}%
+	\portablefigfontA%
+	\tikzset{
+		portable fig/.style={
+			x=\portablefigunit,
+			y=\portablefigunit,
+			fontA/.style={font=\portablefigfontA},
+			fontB/.style={font=\portablefigfontB},
+			fontC/.style={font=\portablefigfontC},
+		},
+		portable fig,
+	}%
+}{}
+
+\newcommand*{\portablefigset}[1]{%
+	\pgfkeys{
+		/portable fig/.cd,#1
+	}%
+}
+
+\portablefigset{
+	% portable fig keys
+	unit/.code={%
+		\pgfmathsetlength{\portablefigunit}{#1}%
+		\tikzset{%
+			x=\portablefigunit,%
+			y=\portablefigunit,%
+		}%
+	},
+	fontA/.store in=\portablefigfontA,
+	fontA/.default={},
+	fontB/.store in=\portablefigfontB,
+	fontB/.default={\footnotesize},
+	fontC/.store in=\portablefigfontC,
+	fontC/.default={\portablefigfontA},
+	% nice hooks
+	tikz/.code={\tikzset{#1}},
+	pgfplots/.code={\pgfplotsset{#1}},
+	% default styles
+	every portable fig/.style={
+		unit=1em,
+		fontA,fontB,fontC,
+		pgfplots={
+			every axis label/.append style={font=\portablefigfontA},
+			every axis/.append style={font=\portablefigfontA},
+		},
+	},
+}
+
+%\newcommandx{\setportablefig}[4][1=,2=,3=\footnotesize,4=\portablefigfontA,usedefault=*]{%
+%	\setlength{\portablefigunit}{\ifemptyarg{#1}1em\else#1\fi}%
+%	\def\portablefigfontA{#2}%
+%	\def\portablefigfontB{#3}%
+%	\def\portablefigfontC{#4}%
+%}
+
+% \inputfig[style]{path/file}[commands before input]
+\newcommandx{\inputfig}[3][1=,3=]{%
+	\begin{portablefig}[#1]#3\input{#2}\end{portablefig}%
+	\ignorespaces%
+}
+
+\colorlet{nicegray}{black!35}
+\colorlet{niceblack}{black!80}
+%\colorlet{niceblue}{blue!70!green}
+\definecolor{niceblue}{hsb}{0.59,1.00,0.70}
+
+% Commands after \fixboundingbox will not expand the bounding box
+\newcommand{\fixboundingbox}{\path[inner sep=0,outer sep=0,use as bounding box,line width=0] (current bounding box.north west) rectangle (current bounding box.south east);}
+
+% Wraps the text of a node in a custom environment: use the key 'wrap text=env', where env is an environment by \newenvironment.
+\def\lblwrap@@{\lblwrap@plain}
+\def\endlblwrap@@{\endlblwrap@plain}
+\def\lblwrap@{\lblwrap@plain}
+\def\endlblwrap@{\endlblwrap@plain}
+\def\lblwrap@maxwidth{\linewidth}
+\def\ignoreunderfullhbox{\hbadness=\@M}
+\tikzset{
+	every node/.append style={
+		no wrap text,no wrap text outer,
+		execute at begin node={\lblwrap@@\lblwrap@},execute at end node={\endlblwrap@\endlblwrap@@},
+	},
+	every wrap text/.code={%
+		\ignoreunderfullhbox%								don't complain about underfull hboxes
+		\tikzset{node halign header=}%						do not re-\let\\ (keep using normal latex \\)
+		\ifdef{\abnormalparskip}{\abnormalparskip{0pt}}{}%	reset \parskip inside node label
+	},
+	no wrap text/.code={%
+		\def\lblwrap@{}%
+		\def\endlblwrap@{}%
+	},
+	wrap text/.code={%
+		\def\lblwrap@{\begin{#1}\pgfkeys{/tikz/every wrap text}}%
+		\def\endlblwrap@{\end{#1}}%
+	},
+	wrap text/.append style={align=center},
+	wrap text outer/.code={%
+		\def\lblwrap@@{\begin{#1}}%
+		\def\endlblwrap@@{\end{#1}}%
+	},
+	no wrap text outer/.style={wrap text outer=lblwrap@plain},
+	wrap text/.default=lblwrap@proper,
+	text ragged left/.style={text badly ragged,wrap text=lblwrap@raggedleft,align=flush right},
+	text ragged right/.style={text badly ragged,wrap text=lblwrap@raggedright,align=flush left},
+	contour wrap method/.style={wrap text outer=tikzcontour},% overrides the setting of tikzcontour
+	max text width/.code={\pgfmathsetlengthmacro\lblwrap@maxwidth{#1}},
+}
+% 'no' wrapper
+\newenvironment{lblwrap@plain}{}{}
+% Nice centering label with proper struts, control its width by setting the 'text width' or 'max text width' key.
+\newenvironment{lblwrap@proper}{\begin{varwidth}[b]{\lblwrap@maxwidth}\Centering\strut}{\strut\end{varwidth}}
+% ragged text
+\newenvironment{lblwrap@raggedleft}{\begin{varwidth}[b]{\lblwrap@maxwidth}\RaggedLeft\strut}{\strut\end{varwidth}}
+\newenvironment{lblwrap@raggedright}{\begin{varwidth}[b]{\lblwrap@maxwidth}\RaggedRight\strut}{\strut\end{varwidth}}
+% better contour handling
+\def\contournode[#1] #2{
+	node[wrap text,contour,#1,alias=last contour] {#2}
+	node[wrap text,#1,draw=none,fill=none,no shade,name=\tikzlastnode text] {#2}
+}
+
+\newcounter{latenodelabel@boxes}
+\newlength{\latenodelabel@boxwidth}
+\newlength{\latenodelabel@boxheight}
+\newenvironment{lblwrap@late}{%
+	% define a box for this label
+	\stepcounter{latenodelabel@boxes}%
+	\xdef\thisbox{\csname latenodelabel@box\arabic{latenodelabel@boxes}\endcsname}%
+	\expandafter\newsavebox\expandafter{\thisbox}%
+	% get label contents
+	\begin{lrbox*}{\thisbox}%
+}{%
+	\end{lrbox*}%
+	% put a empty label with proper size in this node
+	\settowidth{\latenodelabel@boxwidth}{\expandafter\usebox\expandafter{\thisbox}}%
+	\settoheight{\latenodelabel@boxheight}{\expandafter\usebox\expandafter{\thisbox}}%
+	\parbox[b][\latenodelabel@boxheight]{\latenodelabel@boxwidth}{\mbox{}}%
+	% postpone actual label
+	\xdef\latenodelabel@thelabel{
+		\noexpand\noexpand\noexpand\node[plain label,anchor=center] at (\noexpand\tikzlastnode.center) {\noexpand\noexpand\noexpand\usebox{\thisbox}};
+	}%
+}
+
+\tikzset{
+	do postponed label/.code={%
+		\gdef\latenodelabel@thelabel{}%
+		\pgfkeys{/tikz/append after command={%
+			\pgfextra{%
+				\xappto\postprocessnodes{\latenodelabel@thelabel}%
+				\gdef\latenodelabel@thelabel{}%
+			}%
+		}}%
+	},
+	postpone label/.style={wrap text outer=lblwrap@late,do postponed label},
+	immediate label/.style={wrap text outer=lblwrap@plain},
+}
+
+% Post process nodes
+% Usage: node[name=n,post process=\cmd], where \cmd{n} will get called upon the end of the scope/figure
+\gdef\postprocessnodes{}
+\def\postprocessnodesnow{
+	\let\dopostprocessnodes\postprocessnodes
+	\gdef\postprocessnodes{}
+	\dopostprocessnodes
+}
+\gdef\postprocesscmd{}
+\tikzset{
+	post process cmd/.code={\gdef\postprocesscmd{\noexpand#1{\tikzlastnode}}},
+	post process/.style={alias=lastnode,post process cmd={#1},
+		append after command={\pgfextra{\xappto\postprocessnodes{\postprocesscmd}}}},
+	every picture/.append style={execute at end picture={\postprocessnodesnow}},
+	every scope/.append style={execute at begin scope={\postprocessnodesnow},execute at end scope={\postprocessnodesnow}},
+}
+\let\oldpgfonlayer\pgfonlayer
+\gdef\pgfonlayer{\postprocessnodesnow\oldpgfonlayer}
+\preto\endpgfonlayer{\postprocessnodesnow}
+
+% Post processing in combination with a node containing a \tikz{} does not work properly.
+% Use the scopenode environment to wrap \tikz{} in a node.
+\NewEnviron{scopenode}[1][]{\begin{scope}\node[scope node,#1]{\tikz[scope env]{\BODY}};\end{scope}}
+\tikzset{
+	scope node/.style={},
+	scope env/.style={scope node,remember picture},
+}
+
+% Allow shade to turn off
+\def\tikz@falsetext{false}
+\tikzset{
+    shade/.code={
+        \edef\tikz@temp{#1}%
+        \ifx\tikz@temp\tikz@falsetext%
+            \tikz@addmode{\tikz@mode@shadefalse}%
+        \else%  
+            \tikz@addmode{\tikz@mode@shadetrue}%
+        \fi
+    },
+	no shade/.style={shade=false},
+}
+
+% Some default styles
+\tikzset{
+	plain label/.style={inner sep=0,outer sep=0,draw=none,fill=none,no shade,minimum size=0pt,no wrap text,no wrap text outer},
+	drop shadow/.style={general shadow={shadow scale=1,shadow xshift=.5ex,shadow yshift=-.5ex,fill=black!25,every shadow}}, % strip opacity from the default shadow
+}
+
+% Set \xunit and \yunit to a proper length, depending on the current x/y TikZ scope values
+\newlength{\xunit}
+\newlength{\yunit}
+\newcommand{\calcxyunits}{
+	\path let \p1=(0,0), \p2=(1,1), \n1={\x2-\x1}, \n2={\y2-\y1} in \pgfextra{\xdef\portfig@xunit{\n1}\xdef\portfig@yunit{\n2}};
+	\setlength{\xunit}{\portfig@xunit}
+	\setlength{\yunit}{\portfig@yunit}
+}
+\tikzset{
+	every picture/.append style={execute at begin picture={\calcxyunits}},
+}
+
+% white contour for text in labels inside plots (as grid overlay)
+\tikzset{
+	plot label/.style={fontB,anchor=mid,contour color=white},
+	plot label left/.style={plot label,text ragged left,anchor=mid east},
+	plot label right/.style={plot label,text ragged right,anchor=mid west},
+}
+\def\plotlabelnode[#1]{\contournode[plot label,#1] }
+
+% Some default values for plots
+\pgfplotsset{
+	legend style={draw=niceblack},
+	every axis/.append style={semithick,draw=black},
+	every major tick/.append style={semithick,color=black},
+	every minor tick/.append style={thin,color=nicegray},
+	grid style={color=nicegray,thin},
+}
+
+% prevents outside tick to be clipped by axis
+% http://tex.stackexchange.com/questions/91517/how-to-make-the-tick-thickness-as-the-axis-line
+\def\pgfplots@drawticklines@INSTALLCLIP@onorientedsurf#1{}%
+\def\pgfplots@drawgridlines@INSTALLCLIP@onorientedsurf#1{}%
+
+% outline pictures for debugging purposes
+\tikzset{
+	outline figure/.style={
+		execute at end picture={
+			\begin{pgfonlayer}{deepground}
+				\outlinenode[#1] (current bounding box);
+			\end{pgfonlayer}
+		},
+	},
+	outline figure/.default={},
+}
+
+\def\outlinenode{\@ifnextchar[{\outlinenode@@}{\outlinenode@}}
+\def\outlinenode@ (#1);{
+	\outlinenode@@[] (#1);
+}
+\def\outlinenode@@[#1] (#2);{
+	\draw[thin,red,solid,-,#1]
+		let \p{nw}=($(#2.north west)+(.5\pgflinewidth,-.5\pgflinewidth)$),
+			\p{ne}=($(#2.north east)+(-.5\pgflinewidth,-.5\pgflinewidth)$),
+			\p{sw}=($(#2.south west)+(.5\pgflinewidth,.5\pgflinewidth)$),
+			\p{se}=($(#2.south east)+(-.5\pgflinewidth,.5\pgflinewidth)$) in
+		(\p{nw}) rectangle (\p{se})
+		(\p{nw}) -- (\p{se})
+		(\p{ne}) -- (\p{sw});
+}
+
+\@ifclassloaded{memoir}{
+	\newcommand{\outlinetextblock}[1][]{%
+		\tikz[overlay,remember picture]{
+			\strictpagecheck
+			\checkoddpage
+			\ifoddpage
+				\pgfmathsetlengthmacro{\leftmargin}{\trimedge+\spinemargin}
+			\else
+				\pgfmathsetlengthmacro{\leftmargin}{\trimedge+\foremargin}
+			\fi
+			\begin{pgfonlayer}{deepground}
+				\draw[thick,orange!50,line width=1mm,#1]
+					($(current page.north west)+(\leftmargin,\trimtop-\uppermargin)+(.5\pgflinewidth,-.5\pgflinewidth)$) rectangle
+					++($(\textwidth,-\textheight)+(-\pgflinewidth,\pgflinewidth)$);
+			\end{pgfonlayer}
+		}%
+	}
+}{}
+

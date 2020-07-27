@@ -1,0 +1,245 @@
+\newglossary{nolist}{glsno}{glono}{Unlisted Acronyms}
+
+\newacronym{DDR}{DDR}{double data rate \acs{SDRAM}}
+\newacronym{RAM}{RAM}{random-access memory}
+\newacronym{SDRAM}{SDRAM}{synchronous dynamic \acs{RAM}}
+\newacronym{SRAM}{SRAM}{static \acs{RAM}}
+\newacronym{DRAM}{DRAM}{dynamic \acs{RAM}}
+
+\newacronym{CMOS}{CMOS}{complementary metal--oxide--semiconductor}
+\newacronym[user1={hardware component}]{ASIC}{ASIC}{application-specific integrated circuit}
+\newacronym{CISC}{CISC}{complex instruction set computing}
+\newacronym{RISC}{RISC}{reduced instruction set computing}
+\newacronym{DSP}{DSP}{digital signal processing}
+\newacronym{RASP}{RASP}{random-access stored-program machine}
+
+\newacronym[user1={hardware component}]{IP}{IP}{intellectual property}
+\newacronym[user1={hardware component}]{ALU}{ALU}{arithmetic and logic unit}
+\newacronym[user1={hardware component}]{DMA}{DMA}{direct memory access}
+\newacronym[user1={hardware component}]{GPU}{GPU}{graphics processing unit}
+\newacronym{FIFO}{FIFO}{first-in-first-out buffer}
+\newacronym[user1={hardware component}]{MMU}{MMU}{memory management unit}
+\newacronym[user1={hardware component},longplural={networks-on-chip},sort=NoC]{NoC}{NoC}{network-on-chip}
+\newacronym[user1={hardware component}]{PLB}{PLB}{processor local bus}
+\newacronym[user1={hardware component}]{LMB}{LMB}{local memory bus}
+\newacronym[user1={hardware component},longplural={scratchpad memories}]{SPM}{SPM}{scratchpad memory}
+\newacronym[user1={hardware component}]{MUX}{mux}{multiplexer}
+\newacronym[user1={hardware architecture},longplural={systems-on-chip},sort=SoC]{SoC}{SoC}{system-on-chip}
+\newacronym[user1={processor characteristic}]{VLIW}{VLIW}{very large instruction word}
+\newacronym[user1={processor characteristic}]{SIMD}{SIMD}{single instruction, multiple data}
+\newacronym[user1={processor characteristic}]{ILP}{ILP}{instruction-level parallelism}
+
+\newacronym[user1={hardware component}]{FPGA}{FPGA}{field-programmable gate array}
+\newacronym[user1={\acs{FPGA} primitive}]{BRAM}{BRAM}{block \acs{RAM}}
+\newacronym[user1={\acs{FPGA} primitive}]{FF}{FF}{flip-flop}
+\newacronym[user1={\acs{FPGA} primitive}]{LUT}{LUT}{lookup table}
+
+\newacronym{DVI}{DVI}{digital visual interface}
+\newacronym{UART}{UART}{universal asynchronous receiver/transmitter}
+\newacronym{USB}{USB}{universal serial bus}
+
+\newacronym[user1={hardware architecture}]{DSM}{DSM}{distributed shared memory}
+\newacronym[user1={hardware architecture}]{MLC}{MLC}{multi-level cache}
+\newacronym[user1={hardware architecture}]{NUMA}{NUMA}{non-\acl{UMA}}
+\newacronym[user1={hardware architecture}]{SMP}{SMP}{symmetric multiprocessing}
+\newacronym[user1={hardware architecture}]{UMA}{UMA}{uniform memory architecture}
+\newacronym[user1={hardware architecture}]{PGAS}{PGAS}{partitioned global address space}
+
+\newacronym[user1={arbitration}]{FCFS}{FCFS}{first-come-first-served}
+\newacronym{GS}{GS}{guaranteed-service}
+\newacronym[user1={arbitration}]{TDM}{TDM}{time-division multiplexing}
+\newacronym{RMW}{RMW}{read--modify--write}
+\newacronym[user1={software characteristic}]{DRF}{DRF}{data-race free}
+\newacronym[user1={elementary \acs{NoC} unit}]{flit}{flit}{flow control digit}
+
+\newacronym{API}{API}{application programming interface}
+\newacronym{GC}{GC}{garbage collection}
+\newacronym{GHC}{GHC}{Glasgow Haskell compiler}
+\newacronym{OS}{OS}{operating system}
+\newacronym{POSIX}{POSIX}{portable operating system interface for Unix}
+\newacronym{RTS}{RTS}{run-time system}
+
+\newacronym{KPN}{KPN}{Kahn process network}
+\newacronym{RPC}{RPC}{remote procedure call}
+\newacronym{SANLP}{SANLP}{static affine nested loop program}
+\newacronym{CSDF}{CSDF}{cyclo-static dataflow}
+\newacronym{SDF}{SDF}{synchronous dataflow}
+\newacronym{OIL}{OIL}{Omphale input language}
+
+\newacronym{SWCC}{SW-CC}{software cache coherency}
+\newacronym{HWCC}{HW-CC}{hardware cache coherency}
+\newacronym[user1={memory model}]{AC}{AC}{Atomic Consistency}
+\newacronym[user1={memory model}]{SC}{SC}{Sequential Consistency}
+\newacronym[user1={memory model}]{PC}{PC}{Processor Consistency}
+\newacronym[user1={memory model}]{CC}{CC}{Cache Consistency}
+\newacronym[user1={memory model}]{WC}{WC}{Weak Consistency}
+\newacronym[user1={memory model}]{RC}{RC}{Release Consistency}
+\newacronym[user1={memory model}]{EC}{EC}{Entry Consistency}
+\newacronym[user1={memory model}]{LC}{LC}{Location Consistency}
+\newacronym[user1={memory model}]{GS-LC}{GS-LC}{\mbox{\acFu{GS}-Lo}\-ca\-tion Consistency}
+\newacronym[user1={memory model}]{eLC}{eLC}{Enhanced \acl{GS-LC}}
+\newacronym[user1={memory model}]{DC}{DC}{Dag Consistency}
+\newacronym[user1={memory model}]{PRAM}{PRAM}{Pipelined \acs{RAM}}
+\newacronym[user1={memory model},type=nolist]{SlowC}{\acFn{Slow}}{Slow Consistency}
+\newacronym[user1={memory model},type=nolist]{StrC}{StrC}{Streaming Consistency}
+\newacronym[user1={memory model}]{PMC}{PMC}{Portable Memory Consistency}
+\newacronym[user1={memory model property}]{GPO}{GPO}{global process order}
+\newacronym[user1={memory model property}]{GDO}{GDO}{global data order}
+\newacronym[user1={memory model}]{TSO}{TSO}{total store order}
+% index support for memory models
+\newcommand*{\ixmc}[1]{%
+	\edef\mcname{\glsentrylong{#1}}%
+	\expandafter\index\expandafter{\mcname}%
+	\edef\mcname{memory (consistency) model!\glsentrylong{#1}}%
+	\expandafter\index\expandafter{\mcname}%
+}
+\newcommand*{\ixmcalso}[1]{%
+	\edef\ixstring{\glsentrylong{#1}|seealso\string{\acronymfont{\glsentryshort{#1}}\string}}%
+	\expandafter\index\expandafter{\ixstring}%
+	\edef\ixstring{memory (consistency) model!\glsentrylong{#1}|seealso\string{\acronymfont{\glsentryshort{#1}}\string}}%
+	\expandafter\index\expandafter{\ixstring}%
+}
+\newcommand*{\acixmc}[1]{\acix{#1}\ixmc{#1}}
+\newcommand*{\aclixmc}[1]{\aclix{#1}\ixmc{#1}}
+\newcommand*{\acsixmc}[1]{\acsix{#1}\ixmc{#1}}
+\newcommand*{\acfixmc}[1]{\acfix{#1}\ixmc{#1}}
+
+%\ixmcalso{AC}
+\ixmcalso{SC}
+\ixmcalso{PC}
+\ixmcalso{CC}
+\ixmcalso{WC}
+\ixmcalso{RC}
+\ixmcalso{EC}
+%\ixmcalso{LC}
+%\ixmcalso{GS-LC}
+%\ixmcalso{eLC}
+%\ixmcalso{DC}
+\ixmcalso{PRAM}
+%\ixmcalso{TSO}
+\index{memory (consistency) model!Portable Memory Consistency|see{\acs{PMC}}}
+% Slow Consistency is a weird thing...
+\makeatletter
+\def\SlowC{\@ifstar\SlowC@@\SlowC@}
+\def\SlowC@{\acl*{SlowC}\xspace}
+\def\SlowC@@{%
+	\edef\SlowCix{memory (consistency) model!\glsentrylong{SlowC}}%
+	\expandafter\index\expandafter{\SlowCix}%
+	\edef\SlowCix{\glsentrylong{SlowC}}%
+	\expandafter\index\expandafter{\SlowCix}%
+	\SlowC@%
+}
+\makeatother
+
+\index{interconnect|seealso{\acs{NoC}}}
+\index{NoC@\acronymfont {NoC}|seealso{interconnect}}
+\index{DDR@\acronymfont {DDR}|seealso{\acs{SDRAM}}}
+\index{SDRAM@\acronymfont {SDRAM}|seealso{\acs{DDR}}}
+
+\newacronym{ID}{ID}{identifier}
+\newacronym{GP}{GP}{general-purpose}
+
+\newacronym[type=nolist]{NEST}{NEST}{Netherlands Streaming}
+\newacronym[type=nolist]{STW}{STW}{Stichting voor de Technische Wetenschappen}
+\newacronym[type=nolist]{NWO}{NWO}{Nederlandse Organisatie voor Wetenschappelijk Onderzoek}
+\newacronym[type=nolist]{CTIT}{CTIT}{Centre for Telematics and Information Technology}
+\newacronym[type=nolist]{CAES}{CAES}{Computer Architecture for Embedded Systems}
+\newacronym[type=nolist]{EWI}{EEMCS}{Electrical Engineering, Mathematics and Computer Science}
+
+% index support for PMC's annotations
+\newcommandx{\ann}[2][2=()]{\mbox{\lsticode$#1#2$}}
+\newcommandx{\annix}[2][2=()]{\mbox{\ann{#1}[#2]\index{#1@\ann{#1}}\index{annotations!#1@\ann{#1}}}}
+\index{PMC@\acronymfont {PMC}!annotations|see{annotations}}
+
+\newcommand{\resetacr}{
+	\glsresetall
+	\glsunset{ALU}
+	\glsunset{API}
+	\glsunset{ASIC}
+	\glsunset{CISC}
+	\glsunset{CMOS}
+	\glsunset{DDR}
+	\glsunset{DMA}
+	\glsunset{DRAM}
+	\glsunset{DVI}
+	\glsunset{FIFO}
+	\glsunset{flit}
+	\glsunset{FPGA}
+	\glsunset{GPU}
+	\glsunset{LMB}
+	\glsunset{MMU}
+	\glsunset{MUX}
+	\glsunset{ID}
+	\glsunset{IP}
+	\glsunset{OS}
+	\glsunset{OIL}
+	\glsunset{PLB}
+	\glsunset{POSIX}
+	\glsunset{RAM}
+	\glsunset{RISC}
+	\glsunset{SDRAM}
+	\glsunset{SRAM}
+	\glsunset{SIMD}
+	\glsunset{SRAM}
+	\glsunset{UART}
+	\glsunset{USB}
+}
+\resetacr
+
+% long descriptions that should refer to its short one
+\ifdef{\ixseeac}{
+	\ixseeac{PMC}
+}{}
+
+\acrfixed{aethereal}{aethereal}{aethereal@\AE thereal}{\AE thereal}
+\acrfixed{AEthereal}{AEthereal}{aethereal@\AE thereal}{\AE thereal}
+\acrfixed{CoMPSoC}{}{}{\noac{CoMPSoC}}
+\acrfixed{NoFib}{}{}{NoFib}
+\acrfixed{CoreMark}{}{}{CoreMark}
+\acrfixed{SPLASH}{SPLASH-2}{SPLASH-2@\acronymfont{SPLASH-2}}{\acronymfont{SPLASH-2}}
+\acrfixed{PARSEC}{PARSEC}{PARSEC@\acronymfont{PARSEC}}{\acronymfont{PARSEC}}
+
+\acrfixed{lcalc}{lambda-calculus}{*lambda-calculus@\fxlambda-calculus}{\fxlambda-calculus}
+\acrfixed{Lcalc}{Lambda-calculus}{*lambda-calculus@\fxlambda-calculus}{\fxlambda-calculus}
+\acrfixed{LCalc}{Lambda-Calculus}{*lambda-calculus@\fxlambda-calculus}{\fxlambda-Calculus}
+\acrfixed{lterm}{lambda-term}{*lambda-term@\fxlambda-term}{\fxlambda-term}
+\acrfixed{lterms}{lambda-terms}{*lambda-term@\fxlambda-term}{\fxlambda-terms}
+\acrfixed{ourfp}{}{}{Lamb\-da\-C++}
+\let\Ourfp\ourfp
+
+\acrfixed{Starburst}{}{}{Starburst}
+\acrfixed{Helix}{}{}{Helix}
+\acrfixed{Warpfield}{}{}{Warpfield}
+\hyphenation{Star-burst}
+
+\acrfixed{MicroBlaze}{}{}{MicroBlaze}
+\acrfixed{MicroBlazes}{}{MicroBlaze}{MicroBlazes}
+\hyphenation{Micro-Blaze Micro-Blazes}
+
+\acrfixed{CompactFlash}{}{}{Compact\-Flash}
+
+%\hyphenation{su-per-cal-ifrag-ilis-tic-ex-pi-ali-do-cious}
+
+\acrfixed{TILEGx}{}{}{Tilera \noac{TILE-Gx8072}}
+\acrfixed{POWERseven}{}{}{\noac{IBM} \noac{POWER7}}
+\acrfixed{UltraSPARC}{}{}{Ultra\noac{SPARC}~T3}
+\acrfixed{IntelSCC}{}{}{Intel \noac{SCC}}
+\acrfixed{Inteliseven}{}{}{Intel i7-3930K}
+\acrfixed{OCTEON}{}{}{\noac{OCTEON}~\Rmnum{2} \noac{CN6880}}
+\acrfixed{Epiphany}{}{}{Epiphany-\Rmnum{4}}
+\acrfixed{Exynos}{}{}{Exynos~4 Quad}
+\acrfixed{Freescale}{}{}{Freescale T4240}
+\acrfixed{XeonPhi}{}{}{Intel Xeon Phi}
+
+\acrfixed{xSixtyFour}{}{}{x86-64}% or x86_64, AMD64, x64, EM64T, IA-32e
+\acrfixed{ourVirtex}{}{}{Virtex-6 \noac{LX240-T} \ac{FPGA}}
+
+% kind of crucial, as it occurs in the title...
+\ifstrempty{1}{
+	\acrfixed{codesign}{codesign}{codesign}{co\-de\-sign}
+	\acrfixed{Codesign}{Codesign}{codesign}{Co\-de\-sign}
+}{
+	\acrfixed{codesign}{co-design}{co-design}{co-de\-sign}
+	\acrfixed{Codesign}{Co-design}{co-design}{Co-de\-sign}
+}
+

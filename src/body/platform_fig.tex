@@ -1,0 +1,200 @@
+\newcounter{platformlayers}
+\newlength{\platformlayerheight}
+\setlength{\platformlayerheight}{2em}
+\newlength{\platformlayerwidth}
+\setlength{\platformlayerwidth}{30ex}
+\newlength{\platformflapmargin}
+\setlength{\platformflapmargin}{.1\platformlayerheight}
+
+\newenvironment{platformfig}{%
+\begin{portablefig}[fontA=\normalsize]%
+\begin{tikzpicture}[
+	layer fill/.style={fill=white,top color=black!5,bottom color=white},
+	layer/.style={layer fill,rectangle,draw=niceblack,
+		inner ysep=.33ex,inner xsep=4\platformflapmargin,outer sep=0,minimum height=\platformlayerheight,
+		rounded corners=.2ex},
+	cross layer/.style={layer,inner sep=0,minimum height=0,minimum width=\platformlayerheight},
+	layer content/.style={outer sep=0},
+	layer label/.style={font=\itshape,anchor=mid east,outer ysep=0,outer xsep=4\platformflapmargin,inner sep=0},
+	model/.style={fill,top color=black!10,bottom color=black!28},
+	glue/.style={},
+	padded/.style={inner xsep=\platformlayerheight+4\platformflapmargin},
+	flap/.style={thick,rounded corners=.33\platformlayerheight,fill=yellow!15},
+]
+	\coordinate (platformlayertop) at (0,0);
+	\def\prevlayername{platformlayertop}
+	\newcommand{\layertext}[1]{%
+		\parbox{\platformlayerwidth}{\Centering\strut\ignorespaces##1\strut}%
+	}
+	\newcommand{\twopartlabel}[2]{%
+		\parbox[c]{.5\linewidth-4\platformflapmargin}{\Centering\strut##1\strut}\hfill%
+		\parbox[c]{.5\linewidth-4\platformflapmargin}{\Centering\strut##2\strut}%
+	}
+	\setcounter{platformlayers}{0}
+	\newcommand{\nextlayer}[1]{
+		\ifempty{##1}
+			\edef\thislayername{platformlayer\the\value{platformlayers}}
+			\stepcounter{platformlayers}
+		\else
+			\edef\thislayername{##1}
+		\fi
+	}
+	\def\platformlayer[##1] (##2) ##3;{
+		\nextlayer{##2}
+		\begin{pgfonlayer}{foreground}
+			\ignoreunderfullhbox
+			\node[layer,anchor=north,name=\thislayername,at=(\prevlayername.south),##1,fill=none,shade=false] {\layertext{##3}};
+		\end{pgfonlayer}
+		\begin{pgfonlayer}{background}
+			\ignoreunderfullhbox
+			\node[layer,##1,draw=none,inner sep=0,fit={(\thislayername)}] {};
+		\end{pgfonlayer}
+		\edef\prevlayername{\thislayername}
+	}
+	\def\platformlayerglue[##1] (##2) ##3;{
+		\nextlayer{##2}
+		\begin{pgfonlayer}{foreground}
+			\ignoreunderfullhbox
+			\node[layer,anchor=north,name=\thislayername,at=(\prevlayername.south),glue,##1,fill=none,shade=false] {\tikz{
+				\node[inner sep=0] (n) {\layertext{##3}};
+				\path[use as bounding box] (n.north west) rectangle (n.south east);
+				\draw[->,very thick] ($(n.north west)+(-2\platformflapmargin,-\platformflapmargin)$) -- ($(n.south west)+(-2\platformflapmargin,\platformflapmargin)$);
+			}};
+		\end{pgfonlayer}
+		\begin{pgfonlayer}{background}
+			\ignoreunderfullhbox
+			\node[layer,##1,draw=none,inner sep=0,fit={(\thislayername)}] {};
+		\end{pgfonlayer}
+		\edef\prevlayername{\thislayername}
+	}
+	\def\crosslayerright[##1] <##2-##3> (##4) ##5;{
+		\nextlayer{##4}
+		\begin{pgfonlayer}{foreground}
+			\path let \p1=(##2), \p2=(\if\relax\detokenize{##3}\relax\prevlayername.south east\else##3\fi), \n1={\y1-\y2} in
+				(##2) node[cross layer,anchor=north east,minimum height=\n1,name=\thislayername,##1] {};
+			\node[layer content,rotate=90,anchor=mid,at=(\thislayername),##1] {##5};
+		\end{pgfonlayer}
+	}
+	\def\crosslayerleft[##1] <##2-##3> (##4) ##5;{
+		\nextlayer{##4}
+		\begin{pgfonlayer}{foreground}
+			\path let \p1=(##2), \p2=(\if\relax\detokenize{##3}\relax\prevlayername.south east\else##3\fi), \n1={\y1-\y2} in
+				(##2) node[cross layer,anchor=north west,minimum height=\n1,name=\thislayername,##1] {};
+			\node[layer content,rotate=90,anchor=mid,at=(\thislayername),##1] {##5};
+		\end{pgfonlayer}
+	}
+	\def\layerflap[##1] (##2+##3) <##4-##5> +##6+##7;{
+		\draw[flap,##1]
+			let \p{nw}=(##4), \p{se}=(##5), \p{ne}=(\x{se},\y{nw}), \p{sw}=(\x{nw},\y{se}) in
+			($(##2.north west)+(\platformflapmargin,-\platformflapmargin)+(##3,0)$)
+			-- ($(##2.south west)+(\platformflapmargin,\platformflapmargin)+(##3,0)$)
+			-- ($(\p{nw})+(\platformflapmargin,\platformflapmargin)+(##6,0)$)
+			-- ($(\p{sw})+(\platformflapmargin,\platformflapmargin)+(##6,0)$)
+			-- ($(\p{se})+(-\platformflapmargin,\platformflapmargin)+(-##7,0)$)
+			-- ($(\p{ne})+(-\platformflapmargin,\platformflapmargin)+(-##7,0)$)
+			-- ($(##2.south east)+(-\platformflapmargin,\platformflapmargin)+(0,0)$)
+			-- ($(##2.north east)+(-\platformflapmargin,-\platformflapmargin)+(0,0)$)
+			-- cycle;
+	}
+	\def\fullflap[##1] <##2-##3>;{\layerflap[##1] (##2+0) <##2.south west-##3.south east> +0+0;}
+	\def\fullflappadded[##1] <##2-##3>;{\layerflap[##1] (##2+\platformlayerheight) <##2.south west-##3.south east> +\platformlayerheight+\platformlayerheight;}
+	\def\rightflap[##1] <##2-##3>;{\layerflap[##1] (##2+0) <##2.south-##3.south east> +0+0;}
+	\def\rightflappadded[##1] <##2-##3>;{\layerflap[##1] (##2+\platformlayerheight) <##2.south-##3.south east> +0+\platformlayerheight;}
+	\def\leftflap[##1] <##2-##3>;{\layerflap[##1] (##2+0) <##2.south west-##3.south> +0+0;}
+	\def\leftflappadded[##1] <##2-##3>;{\layerflap[##1] (##2+\platformlayerheight) <##2.south west-##3.south> +\platformlayerheight+0;}
+	\def\flapideapadded[##1] <##2-##3>;{
+		% flap background
+		\path[flap,##1,draw=none]
+			($(##2.south east)+(-\platformflapmargin,\platformflapmargin)$)
+			--($(##2.north east)+(-\platformflapmargin,-\platformflapmargin)$)
+			--($(##2.north west)+(\platformflapmargin,-\platformflapmargin)+(\platformlayerheight,0)$)
+			--($(##2.south west)+(\platformflapmargin,\platformflapmargin)+(\platformlayerheight,0)$)
+			--($(##2.south east)+(0,\platformflapmargin)+(-2\platformlayerheight,0)$)
+			--($(##3.south east)+(0,\platformflapmargin)+(-2\platformlayerheight,0)$)
+			--($(##3.south east)+(-\platformflapmargin,\platformflapmargin)+(-\platformlayerheight,0)$)
+			--($(##2.south east)+(-\platformflapmargin,\platformflapmargin)+(-\platformlayerheight,0)$)
+			--cycle;
+		% flap solid line
+		\draw[flap,##1]
+			($(##2.south east)+(-\platformflapmargin,\platformflapmargin)+(-\platformlayerheight,-.5\platformlayerheight)$)
+			-- ++(0,.5\platformlayerheight)
+			--($(##2.south east)+(-\platformflapmargin,\platformflapmargin)$)
+			--($(##2.north east)+(-\platformflapmargin,-\platformflapmargin)$)
+			--($(##2.north west)+(\platformflapmargin,-\platformflapmargin)+(\platformlayerheight,0)$)
+			--($(##2.south west)+(\platformflapmargin,\platformflapmargin)+(\platformlayerheight,0)$)
+			--($(##2.south east)+(0,\platformflapmargin)+(-2\platformlayerheight,0)$)
+			-- ++(0,-.5\platformlayerheight);
+		% flap dashed line
+		\draw[flap,##1,dashed]
+			($(##2.south east)+(0,\platformflapmargin)+(-2\platformlayerheight,0)$)
+			++(0,-.5\platformlayerheight)
+			--($(##3.south east)+(0,\platformflapmargin)+(-2\platformlayerheight,0)$)
+			--($(##3.south east)+(-\platformflapmargin,\platformflapmargin)+(-\platformlayerheight,0)$)
+			--($(##2.south east)+(-\platformflapmargin,\platformflapmargin)+(-\platformlayerheight,-.5\platformlayerheight)$);
+	}
+	\def\platformlayerlabel[##1] <##2> ##3;{
+		\node[layer label,##1] at (##2.west) {##3};
+	}
+	\def\platformlayersnode[##1] <##2-##3> +##4 (##5) ##6;{
+		\nextlayer{##5}
+		\pgfmathparse{ifthenelse(##4>=0pt,"east","west")}
+		\edef\nodexanchor{\pgfmathresult}
+		\path let \p1=(##2.north \nodexanchor), \p2=(##3.south \nodexanchor),
+			\n1={\y1-\y2}, \n2={\y1-\n1/2}, \n3={ifthenelse(##4>=0pt,max(\x1,\x2),min(\x1,\x2))+##4} in
+			(\n3,\n2) node[anchor=center,inner sep=0,name=\thislayername,##1,minimum height=\n1] {##6};
+	}
+}{
+\end{tikzpicture}%
+\end{portablefig}%
+}
+
+\newcounter{chapfig}
+\setcounter{chapfig}{0}
+
+\newenvironment{chapterfig}[1][]{%
+	\cleartillversowiththought\bodyfont\thispagestyle{onlynum}%
+	\begin{figure*}[p!]%
+		\begin{center}%
+			\def\chapterfigref{\ifstrempty{#1}{Chapter}{#1}\xspace}%
+			\begin{platformfig}%
+				\let\origlabel\label%
+				\setcounter{chapfig}{\value{chapter}}%
+				\refstepcounter{chapfig}%
+				\gdef\lastchapfiglabel{}%
+				\expandafter\renewcommand\expandafter{\expandafter\label\expandafter}%
+					\expandafter[\expandafter2\expandafter]\expandafter[\expandafter]\expandafter{%
+					\origlabel[chapfig]{##2}\gdef\lastchapfiglabel{##2}}%
+}{%
+				\expandafter\ifstrempty\expandafter{\lastchapfiglabel}{%
+					\edef\chapfiglabel{\arabic{chapfig}:defaultlabel}%
+					\expandafter\label\expandafter{\chapfiglabel}%
+				}{}%
+			\end{platformfig}
+	
+			\vspace{2em}\noindent{\Large\bfseries\textsc{\chapterfigref overview}}
+		\end{center}%
+	\end{figure*}%
+}
+
+\crefname{chapfig}{the overview figure of \csname cref@chapter@name\endcsname}{the overview figures of \csname cref@chapter@name@plural\endcsname}
+\Crefname{chapfig}{The overview figure of \csname cref@chapter@name\endcsname}{The overview figures of \csname cref@chapter@name@plural\endcsname}
+
+\makeatletter
+\def\@thischapfig{%
+	\begingroup%
+	\def\reftextfacebefore{on the left}%
+	\expandafter\vpageref\expandafter{\lastchapfiglabel}%
+	\endgroup\xspace%
+}
+\def\@otherchapfig[#1]{\vpageref{#1}\xspace}
+\def\chapfigpageref{\@ifnextchar[\@otherchapfig\@thischapfig}
+\makeatother
+
+\makeatletter
+\def\platformaspect#1,{%
+	{#1}%
+	\@ifnextchar\relax\relax{\hspace{.2ex plus .3ex}+\hspace{.2ex plus .3ex}\platformaspect}%
+}
+\makeatother
+\newcommand{\theplatform}[1]{\{\platformaspect#1,\relax\}}
+

@@ -1,0 +1,96 @@
+\begin{tikzpicture}
+	\begin{axis}[
+		width=.7\linewidth,
+		height=.6\linewidth,
+		xmin=0,
+		xmax=32.1,
+		ymin=0,
+		grid=major,
+		every axis plot/.append style={
+			domain=1:32,
+			samples at={1,2,...,32},
+		},
+		legend style={
+			cells={anchor=west},
+			anchor=west,
+			at={(1.02,.5)},
+		},
+		xtick={0,4,...,32},
+		enlargelimits=false,
+		ylabel={\strut Aggregate performance (\si{instructions\per\second})},
+		xlabel={Number of cores},
+	]
+
+		% linear
+		\def\cyclespersec{100000000}				% 100 MHz
+		\def\cyclesperinstr{1}
+		\def\instrpersec{((1/\cyclesperinstr)*\cyclespersec)}
+		
+		\addplot {x*\instrpersec}
+			node[coordinate,pos=.85,name=diff lin] {};
+		\addlegendentry{local execution}
+
+		% bounded by cache hitrate
+		\def\instrperread{8/9}
+		\def\cachehitrate{.99}						% both I and D
+		\def\readspermis{1/(1-\cachehitrate)}
+		\def\instrpermis{							%
+			\instrperread*\readspermis				%
+		}
+		\def\treelatency#1{round(ln(#1)/ln(2)+0.5)}	% binary tree
+		\def\Sbcread#1{1+\treelatency{#1}}
+		\def\SDRAMlatency{15}
+		\def\backviatree#1{\treelatency{#1}}
+		\def\cyclespermis{\instrperread*(\readspermis-1)}
+
+		\def\cacheboundfun#1{								%
+			\instrpermis/									%
+			(	\Sbcread{#1}+\SDRAMlatency+\backviatree{#1}	%
+				+\cyclespermis								%
+			)*\cyclespersec*#1								%
+		}
+
+		\addplot {\cacheboundfun{x}}
+			node[coordinate,pos=.865,name=diff cache] {};
+		\addlegendentry{cache bound}
+
+		% bounded by memory bandwidth
+		\def\maxmembw{(100000000/9)}				% mem-ops per second
+		\def\memboundfun#1{\maxmembw*\instrpermis}
+
+		\addplot {\memboundfun{x}}
+			node[coordinate,pos=.95,name=diff mem] {};
+		\addlegendentry{memory bound}
+
+		\def\thecoords{}
+		\def\addcoord#1(#2,#3){
+			\pgfkeys{/pgf/fpu=true,/pgf/fpu/output format=fixed}
+			\pgfmathparse{#2}
+			\eappto#1{(\pgfmathresult,}
+			\pgfmathparse{#3}
+			\eappto#1{\pgfmathresult) }
+			\pgfkeys{/pgf/fpu=false}
+		}
+		\addcoord\thecoords(0,0)
+		\addcoord\thecoords(8,\cacheboundfun{8}*.9)
+		\addcoord\thecoords(16,\memboundfun{0}*.9)
+		\addcoord\thecoords(32,\memboundfun{0})
+
+		\edef\addplotcmd{\noexpand\addplot+[mark=none,densely dashed,smooth] coordinates {\thecoords};}
+		\addplotcmd
+		\addlegendentry{below bounds}
+
+		% linear--cache-bound difference
+		\path let \p1=(diff lin), \p2=(diff cache), \n1={\x1-13ex}, \n2={(\y1-\y2)/2+\y2}, \p3=(\n1,\n2) in
+			(\p1) edge[shorten <=.5ex] (\x3,\y1)
+			(\p2) edge[shorten <=.5ex] (\x3,\y2)
+			($(\x3,\y1)+(1ex,0)$) edge[<->] ($(\x3,\y2)+(1ex,0)$)
+			(\p3) \plotlabelnode[anchor=east,text width=.3\linewidth,text ragged left] {difference determined by cache hit rate ($\SYMhitrate\!=$~\num{1} \vs $\SYMhitrate\!=$~\num{0.99})}
+		;
+		% bound height
+		\path let \p1=(diff mem), \p2=(axis cs:0,0) in
+			(\p1) edge[<->] (\x1,\y2)
+			($(\p1)!.6!(\x1,\y2)$) \plotlabelnode[anchor=east,text width=.3\linewidth,text ragged left,outer xsep=1ex] {difference determined by cache hit rate and memory controller bandwidth}
+		;
+	\end{axis}
+\end{tikzpicture}%

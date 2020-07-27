@@ -1,0 +1,19 @@
+$go_mode = 1;
+$pdf_mode = 1;
+$pdflatex = 'pdflatex -shell-escape';
+$preview_continuous_mode = 0;
+if($^O eq 'linux') {
+	$pdf_previewer = 'okular %S &';
+	$pdf_update_method = 0;
+} else {
+	$pdf_previewer = 'open -a Skim %S';
+	$pdf_update_method = 0;
+}
+
+$recorder = 1;
+$hash_calc_ignore_pattern{'xmpi'} = '^.*$';
+
+$ENV{'TEXMFHOME'} = "$ENV{PWD}/../../texmf";
+$ENV{'TEXMFVAR'} = "$ENV{PWD}/../../texmf";
+$ENV{'TEXMFCONFIG'} = "$ENV{PWD}/../../texmf";
+

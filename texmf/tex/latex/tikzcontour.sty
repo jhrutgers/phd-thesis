@@ -1,0 +1,47 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{tikzcontour}
+
+\RequirePackage{tikz}
+\RequirePackage[outline]{contour}
+\contourlength{1pt}
+
+%% http://tex.stackexchange.com/a/18522
+% Mostly taken from `\@contour@outline` from `contour`s `pdftex.cnt` driver file:
+% Work with pdftex only
+\newenvironment{tikzcontour}{%}
+	\begingroup%
+		\color{\thecontourcolor}%
+		\begin{lrbox}{\@tempboxa}%
+}{%
+		\end{lrbox}%
+		%\setbox0=\hbox{\usebox\@tempboxa}%
+		\begingroup%
+			\setlength\con@length{\con@base@length}%
+			\setlength\con@length{2\con@length}%
+			\setlength\con@length{0.99626400996\con@length}%
+			\con@coloroff%
+			\pdfliteral{%
+				q
+				1 j
+				1 J
+				1 Tr
+				\strip@pt\con@length\space w
+			}%
+			%\rlap%
+			\mbox% change back to `\rlap` when "real" text is drawn
+			{\unhbox\@tempboxa}%
+			\pdfliteral{%
+				Q
+			}%
+		\endgroup%
+		%\unhbox0%
+	\endgroup%
+}
+
+\tikzset{
+	contour color/.code={\def\thecontourcolor{#1}},
+	contour wrap method/.style={execute at begin node={\begin{tikzcontour}},execute at end node={\end{tikzcontour}}},
+	contour/.style={contour color=#1,contour wrap method},
+	contour/.default=black!25,
+}
+

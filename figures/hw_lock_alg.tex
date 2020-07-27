@@ -1,0 +1,108 @@
+\def\Call#1(#2){\FuncSty{#1(}\ArgSty{#2}\FuncSty{)}}%
+\providecommand{\SetKwProc}[4]{%
+	\SetKw{Kw#1}{#2:}%
+	\SetKwBlock{#1Impl}{#3}{#4}%
+	\expandafter\newcommandx\expandafter{\csname #1\endcsname}[4][3=]{%
+		\vspace{.5\baselineskip}%
+		\csname Kw#1\endcsname{\Call ##1(##2)}%
+		\par##3%
+		\csname #1Impl\endcsname{##4}%
+	}%
+}%
+\SetKwInput{KwGlobal}{Global}%
+\SetKwInput{KwInput}{Input}%
+\SetKwProc{Procedure}{Procedure}{begin}{end}%
+\SetKwBlock{Atomic}{atomic}{end}%
+\DontPrintSemicolon%
+%
+\begin{algorithm}[p]
+\KwGlobal{administration of the owner (or last waiting in queue) of all locks that are currently given out by this server:
+	\mbox{$\SYMservermap:\text{lock}\rightarrow\text{process}$, $\SYMservermap\leftarrow\varnothing$}}
+
+\Procedure{request}{\SYMlock,\SYMrequester}[
+	\KwInput{process \SYMrequester requesting lock \SYMlock}
+]{
+	\uIf{$\SYMservermap[\SYMlock]$ is unassociated}{
+		$\SYMservermap[\SYMlock]\leftarrow\SYMrequester$\;
+		\Return{got lock \SYMlock} \label{line:distlock:server:free}\;
+	}\Else{
+		$\SYMproc\leftarrow\SYMservermap[\SYMlock]$\;
+		$\SYMservermap[\SYMlock]\leftarrow\SYMrequester$\;
+		\Return{ask \SYMproc for state of \SYMlock} \label{line:distlock:server:owned}\;
+	}
+}
+
+\Procedure{giveup}{\SYMlock,\SYMrequester}[
+	\KwInput{process \SYMrequester giving up lock \SYMlock}
+]{
+	\If{$\SYMservermap[\SYMlock]=\SYMrequester$ \label{line:distlock:server:checkrace}}{
+		unassociate $\SYMservermap[\SYMlock]$\;
+	}
+}
+\caption{Lock server}%
+\label{alg:hardware:distlock:server}%
+\end{algorithm}%
+%
+\begin{algorithm}[p]
+\KwGlobal{administration of owned locks of a local process $\SYMproc\in\SYMProc$:
+	\mbox{$\SYMlockset[\SYMproc]:\text{lock}\rightarrow\lbrace\text{free},\text{locked},\text{migrate},\text{stolen}\rbrace$, %
+	$\forall \SYMproc\in\SYMProc_{\text{local}}:\SYMlockset[\SYMproc]\leftarrow\varnothing$}}
+
+\Procedure{ask}{\SYMlock,\SYMproc,\SYMrequester}[
+	\KwInput{lock \SYMlock, owned by process \SYMproc, requested by \SYMrequester}
+]{
+	\Atomic{
+		\uIf{$\SYMlockset[\SYMproc][\SYMlock]$ is unassociated}{
+			\Return{free} \label{line:distlock:ask:race}\;
+		}\uElseIf{$\SYMlockset[\SYMproc][\SYMlock]=$ locked}{
+			$\SYMlockset[\SYMproc][\SYMlock]\leftarrow$ migrate on unlock to \SYMrequester \label{line:distlock:ask:migrate} \;
+			\Return{locked}\;
+		}\Else{
+			$\SYMlockset[\SYMproc][\SYMlock]\leftarrow$ stolen \label{line:distlock:ask:steal}\;
+			\Return{free}\;
+		}
+	}
+}
+\caption{Message handling daemon}%
+\label{alg:hardware:distlock:ask}%
+\end{algorithm}%
+%
+\begin{algorithm}[tp]
+\KwGlobal{\SYMlockset[\SYMself], which is one of \SYMlockset of \vref{alg:hardware:distlock:ask}}
+
+\Procedure{lock}{\SYMlock}[
+	\KwInput{lock \SYMlock}
+]{
+	\Atomic{
+		$\SYMstate\leftarrow\SYMlockset[\SYMself][\SYMlock]$\;
+		$\SYMlockset[\SYMself][\SYMlock]\leftarrow$ locked
+	}
+	\If{$\SYMstate\ne$ free}{
+		\If{\Call request(\SYMlock,\SYMself) $=$ ask \SYMproc\label{line:distlock:lock:req}}{ 
+			\If{\Call ask(\SYMlock,\SYMproc,\SYMself) $=$ locked \label{line:distlock:lock:ask}}{
+				wait for signal (signal counterpart at line~\ref{line:distlock:unlock:signal}) \label{line:distlock:lock:wait} \;
+			}
+		}
+	}
+}
+
+\Procedure{unlock}{\SYMlock}[
+	\KwInput{locked lock \SYMlock}
+]{
+	dummy read \acs{SDRAM} \label{line:distlock:unlock:memsync}\;
+	\Atomic{
+		$\SYMstate\leftarrow\SYMlockset[\SYMself][\SYMlock]$\;
+		$\SYMlockset[\SYMself][\SYMlock]\leftarrow$ free \label{line:stateupdate} \;
+	}
+	\uIf{$\SYMstate=$ migrate to $\SYMrequester$}{
+		unassociate $\SYMlockset[\SYMself][\SYMlock]$ \;
+		signal $\SYMrequester$ (wait counterpart at line~\ref{line:distlock:lock:wait}) \label{line:distlock:unlock:signal} \;
+	}\ElseIf{too many free locks in \SYMlockset[\SYMself]}{
+		$\SYMlock'\leftarrow$ oldest free lock in \SYMlockset[\SYMself] \;
+		unassociate $\SYMlockset[\SYMself][\SYMlock']$ \;
+		giveup($\SYMlock'$,\SYMself) \;
+	}
+}
+\caption{Locking process}%
+\label{alg:hardware:distlock:lock}%
+\end{algorithm}%

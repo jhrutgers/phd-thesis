@@ -1,0 +1,249 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{tabbars}
+
+\RequirePackage{etoolbox,array,collcell,siunitx,tikz}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Implementation
+
+% gobble until next \relax
+\def\bar@gobblerestofarg#1{%
+	\ifx#1\relax\else\expandafter\bar@gobblerestofarg\fi%
+}
+
+% \ifischar{a}{b}{when a==b}{otherwise}
+\def\ifischar#1#2{%
+	\ifx#1#2\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi%
+}
+
+% if the tokens after \bar@startslikenum seems to be a decimal number, return 1, otherwise 0 (and gobble the number)
+\def\bar@startslikenum#1{%
+	\ifischar{#1}{0}{1}{%
+	\ifischar{#1}{1}{1}{%
+	\ifischar{#1}{2}{1}{%
+	\ifischar{#1}{3}{1}{%
+	\ifischar{#1}{4}{1}{%
+	\ifischar{#1}{5}{1}{%
+	\ifischar{#1}{6}{1}{%
+	\ifischar{#1}{7}{1}{%
+	\ifischar{#1}{8}{1}{%
+	\ifischar{#1}{9}{1}{%
+	\ifischar{#1}{.}{1}{%
+	\ifischar{#1}{-}{1}{%
+	0}}}}}}}}}}}}%
+	\bar@gobblerestofarg%
+}
+
+% \ifisnum{x}{when x is a decimal number}{otherwise}
+\newcommand{\ifisnum}[3]{%
+	\ifnumequal{\bar@startslikenum#1\relax}{1}{#2}{#3}%
+}
+
+\newcounter{barcolumnsid}
+\newcounter{barcolumn}
+\newcounter{barcolumnrow}
+\newcounter{thisbarcolumns}
+
+\def\bar@id{%
+	tabbars_\arabic{barcolumnsid}_\arabic{barcolumn}_%
+}
+
+\tikzset{
+	tabular bar/.style={
+		draw,
+		fill=black!15,
+		outer ysep=0,inner sep=0,
+	},
+	tabular bar legend/.style={
+		minimum height=1ex,minimum width=1.5ex,
+		outer sep=.5\pgflinewidth,anchor=south,
+	},
+	shadow bar/.style={% will be appended to tabular bar, when appropriate
+		dashed,
+	},
+}
+
+% wrapper of cell content to add the bars
+\newcommand*{\barcolumncell}[1]{%
+	\stepcounter{barcolumn}%
+	\ifisnum{#1}{%
+		\edef\celldata{#1}%
+		% assume processing table data
+		% wrap column counter
+		\ifnumgreater{\value{barcolumn}}{\value{thisbarcolumns}}{%
+			\setcounter{barcolumn}{1}%
+		}{}%
+		% print data
+		\ifbool{tabbar@shownum}{%
+			\SI{#1}{\percent}\hspace{\barcolumnspacing}}{}%
+		\hspace{\barcolumnspacingextra}%
+		\ifbool{tabbar@showbar}{%
+			\parbox[t]{\barcolumnwidth}{%
+				\centering%
+				% handle first row case
+				\ifdef{\bar@firstrow}{%
+					\setcounter{barcolumnrow}{1}%
+					\tikz[baseline=0,remember picture]{
+						\node[anchor=base,outer sep=0,inner sep=0] (\bar@id node) {\strut};
+						\coordinate (\bar@id top) at (\bar@id node.north);
+						\coordinate (\bar@id filled) at (\bar@id top);
+					}%
+				}{%
+					\tikz[baseline=0,remember picture]{
+						\node[anchor=base,outer sep=0,inner sep=0] (\bar@id node) {\strut};
+						\coordinate (\bar@id bottom) at (\bar@id node.base);
+%						\draw[overlay] (\bar@id top) -- (\bar@id bottom);
+						\path[overlay] let \p{top}=(\bar@id top), \p{bottom}=(\bar@id bottom), \n1={min(\paperheight,\y{top}-\y{bottom})} in
+							\pgfextra{
+								\immediate\write\@auxout{%
+									\string\csgdef{\bar@id height}{\n1}%
+								}
+							};
+					}%
+				}%
+				% draw bar
+				\edef\thisbarheight{\bar@id height}%
+				\edef\thisbaroffset{\bar@id offset}%
+				\expandafter\ifcsdef\expandafter{\thisbarheight}{%
+					\tikz[remember picture,overlay]{
+						\path let \p{top}=(\bar@id filled), \n{height}={\expandafter\csname\thisbarheight\endcsname *(\celldata/100.0)}, 
+							\n{offset}={
+								\expandafter\csname\thisbarheight\endcsname *
+								(\expandafter\ifcsdef\expandafter{\thisbaroffset}{\expandafter\csname\thisbaroffset\endcsname}{0}/100.0)
+							} in
+							(\p{top}) ++(0,-\n{offset}) node[
+								tabular bar,tabular bar \arabic{barcolumnrow}/.try,
+								anchor=north,minimum width=\barcolumnwidth,minimum height=\n{height},
+								] (\bar@id fill) {};
+						\coordinate (\bar@id filled) at (\bar@id fill.south);
+					}%
+					\expandafter\csxdef\expandafter{\thisbaroffset}{0}% only apply offset once
+				}{}%
+				% determine total size of column, and offset accordingly
+				\edef\thisbartotal{\bar@id total}%
+				\expandafter\ifcsdef\expandafter{\thisbartotal}{}{%
+					\expandafter\csdef\expandafter{\thisbartotal}{0}}%
+				\pgfmathparse{\expandafter\csname\thisbartotal\endcsname + \celldata}%
+				\expandafter\csxdef\expandafter{\thisbartotal}{\pgfmathresult}%
+				\pgfmathparse{100 - \expandafter\csname\thisbartotal\endcsname}%
+				\immediate\write\@auxout{\csgdef{\thisbaroffset}{\pgfmathresult}}%
+				% wrap around
+				\ifnumequal{\value{barcolumn}}{\value{thisbarcolumns}}{%
+					\global\undef\bar@firstrow%
+				}{}%
+			}%
+		}{}%
+		\ifnumequal{\value{barcolumn}}{\value{thisbarcolumns}}{%
+			\stepcounter{barcolumnrow}%
+		}{}%
+	}{%
+		% assume processing table header
+		\setcounter{thisbarcolumns}{\value{barcolumn}}%
+		\stepcounter{barcolumnsid}%
+		\setcounter{barcolumnrow}{1}%
+		#1%
+	}%
+}
+
+\gpreto{\tabular}{%
+	\stepcounter{barcolumnsid}%
+	\setcounter{barcolumn}{0}%
+	\setcounter{thisbarcolumns}{0}%
+	\global\def\bar@firstrow{}%
+}
+
+% patch collcell to allow ctable's \NN, \ML and \LL
+\patchcmd{\collect@cell@arg}{\default}{
+	% insert in case statement that collects the cell's contents
+    \NN{\collect@cell@cr#1}% support for ctable
+    \ML{\collect@cell@cr#1}% support for ctable
+	\LL{\collect@cell@cr#1}% support for ctable
+	\default% continue with default...
+}{
+	\PackageInfo{tabbars}{Patched collcell to support ctable.}
+}{
+	\PackageWarning{tabbars}{Cannot patch collcell to support ctable!}{}
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Column type and style
+
+\newbool{tabbar@shownum}
+\newbool{tabbar@showbar}
+
+\pgfkeys{
+	/tabbar/.cd,
+	tikz/.code={\tikzset{#1}},
+	bar left spacing/.code={%
+		\def\barcolumnspacing{#1}%
+	},
+	extra bar left spacing/.code={%
+		\def\barcolumnspacingextra{#1}%
+	},
+	bar width/.code={%
+		\def\barcolumnwidth{#1}%
+	},
+	display/.is choice,
+	display/num/.code={%
+		\setbool{tabbar@shownum}{true}%
+		\setbool{tabbar@showbar}{false}%
+	},
+	display/numbar/.code={%
+		\setbool{tabbar@shownum}{true}%
+		\setbool{tabbar@showbar}{true}%
+	},
+	display/bar/.code={%
+		\setbool{tabbar@shownum}{false}%
+		\setbool{tabbar@showbar}{true}%
+	},
+	display/shadow/.style={
+		every shadow,
+		tikz={tabular bar/.append style={shadow bar}},
+	},
+	% default styles
+	tabbar/.style={
+		display=numbar,
+		bar left spacing=.75ex,
+		extra bar left spacing=0pt,
+		bar width=3.5ex,
+	},
+	every cell/.style={
+		tabbar,
+	},
+	every shadow/.style={
+		display/bar,
+		bar width=2.16ex,
+	},
+}
+
+% new tabular column type `B', use decimal numbers for percentages in the tabular (without the %)
+\newcolumntype{B}[1]{>{\tabbarset{every cell,#1}\collectcell\barcolumncell}r<{\endcollectcell}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% User interface
+
+\newcommand*{\tabbarset}[1]{%
+	\pgfkeys{/tabbar/.cd,#1}%
+}
+
+% inserts a small legend box: \barlegend[optional row number, otherwise autodetect]
+\newcommand*{\barlegend}[1][\arabic{barcolumnrow}]{%
+	\edef\therownum{#1}%
+	\tikz[baseline=0]{
+		\node[tabular bar,tabular bar \therownum/.try,tabular bar legend] {};
+	}\xspace%
+}
+
+% define a style for a row of the table/bar
+\newcommand*{\settabbarstyle}[2]{
+	\edef\therowstyle{tabular bar #1/.append style={#2}}%
+	\expandafter\tikzset\expandafter{\therowstyle}%
+}
+
+% some predefined styles
+\settabbarstyle{1}{fill=red!70}
+\settabbarstyle{2}{fill=blue!80!white}
+\settabbarstyle{3}{fill=black!80}
+\settabbarstyle{4}{fill=yellow!90}
+\settabbarstyle{5}{fill=green!60!black}
+

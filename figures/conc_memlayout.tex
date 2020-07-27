@@ -1,0 +1,36 @@
+\newlength{\wordheight}%
+\setlength{\wordheight}{2.9em}%
+\begin{tikzpicture}[
+	field/.style={minimum width=25ex,draw=niceblack,minimum height=\wordheight,outer sep=0,inner sep=2pt,anchor=north,},
+	last field/.style={field,draw=none},
+	header/.style={field,fill=black!10},
+	first header/.style={header,draw=none,fill=none},
+	subcap/.style={field,outer sep=3pt,draw=none,minimum height=0pt},
+]
+\newcommand{\fieldcontent}[2]{\parbox{23ex}{\Centering\strut{\color{black!75}\textit{size: #1}}\\#2\strut}}
+\newcommand{\termobject}[2]{
+	\node[field,rounded corners=1ex,minimum height=#1\wordheight,#2] (obj) {};
+	\node[header,rounded corners=1ex,minimum height=1.5\wordheight,#2] {};
+}
+\newcommand{\shiftfield}[1]{($(obj.north)+(0,-#1\wordheight)$)}
+\termobject{5}{at={(0,0)}}
+\node[first header]				at \shiftfield{0}	{\fieldcontent{1 word}{type of \lterm}};
+\node[header]					at \shiftfield{1}	{\fieldcontent{1 word}{state/flags (for \acs{GC})}};
+\node[last field,minimum height=3\wordheight]	at \shiftfield{2}	{\fieldcontent{arbitrary}{raw data}};
+\node[subcap]					at (obj.south)		{\strut(a) constant};
+
+\termobject{5}{at={(28ex,0)}}
+\node[first header]				at \shiftfield{0}	{\fieldcontent{1 word}{type of \lterm}};
+\node[header]					at \shiftfield{1}	{\fieldcontent{1 word}{state/flags (for \acs{GC})}};
+\node[field]					at \shiftfield{2}	{\fieldcontent{1 word}{function term pointer}};
+\node[field]					at \shiftfield{3}	{\fieldcontent{1 word}{argument term pointer}};
+\node[last field]				at \shiftfield{4}	{\fieldcontent{1 word}{indirection pointer}};
+\node[subcap]					at (obj.south)		{\strut(b) application};
+
+\termobject{4}{at={(56ex,0)}}
+\node[first header]				at \shiftfield{0}	{\fieldcontent{1 word}{type of \lterm}};
+\node[header]					at \shiftfield{1}	{\fieldcontent{1 word}{state/flags (for \acs{GC})}};
+\node[field]					at \shiftfield{2}	{\fieldcontent{1 word}{function pointer}};
+\node[last field]				at \shiftfield{3}	{\fieldcontent{1 word}{indirection pointer}};
+\node[subcap]					at ($(obj.south)+(0,-\wordheight)$)	{\strut(c) function};
+\end{tikzpicture}%

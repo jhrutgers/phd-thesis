@@ -1,0 +1,67 @@
+\begin{platformfig}
+% spacings
+\def\pmwidth{13ex}
+\def\pmspacing{5\platformflapmargin}
+
+% defs
+\def\plbody{}
+\def\pmbody{}
+\def\mocbody{}
+\def\cmbody{}
+\def\mmbody{}
+\def\pmlist{}
+\newcommand{\celltext}[1]{\parbox[c]{\pmwidth}{\Centering\strut#1\strut}\hspace{\pmspacing}}
+\newcommand{\progmod}[7]{
+	\appto\plbody{\celltext{#1\\(#2)}}
+	\appto\pmbody{\celltext{#3}}
+	\appto\mocbody{\celltext{#4}}
+	\appto\cmbody{\celltext{#5}}
+	\appto\mmbody{\celltext{#6}}
+	\appto\pmlist{,#7}
+}
+
+% collecting models
+\progmod{C99}		{\thecmd{gcc}}		{imperative}					{\acs{RASP} machine}{single-threaded}				{irrelevant}				{moc.south}
+\progmod{C++11}		{\thecmd{g++}}		{object-oriented}				{\acs{RASP} machine}{threads}						{relaxed}					{mm.south}
+\progmod{Java~5.0}	{\thecmd{javac}}	{object-oriented}				{stack machine}		{threads}						{relaxed}					{mm.south}
+%\progmod{Python}	{Stackless}			{imperative, object-oriented}	{register machine}	{microthreads, \ie tasklets}	{\acs{FIFO} channels}		{cm.south}
+\progmod{Go}		{\thecmd{gc}}		{imperative}					{register machine}	{microthreads, \ie goroutines}	{relaxed,\\\acs{FIFO} channels (preferred)}	{mm.north)!.3!(mm.south}
+%\progmod{\acs{OIL}}{Omphale}			{sequential}					{\acs{KPN}}			{communicating sequential processes}{\acs{FIFO}/message-passing}{cm}
+\progmod{\acs{SANLP}}{\texttt{pn}+\textsc{Espam}}	{sequential}		{register machine}	{\acs{KPN}}						{\acs{FIFO} channels}		{cm.south}
+\progmod{Erlang}	{\thecmd{compile}}	{functional}					{\lcalc}			{Actor model}					{\acs{FIFO} channels}		{cm.south}
+\progmod{Haskell}	{\acs{GHC}}			{functional}					{\lcalc}			{microthreads, \ie sparks}		{(originally) strict}		{moc.south}
+
+% dump figure
+\begin{scope}[
+	language text/.style={draw=none,outer sep=0,fill=none,inner xsep=\pmspacing/2},
+	language layer background/.style={layer,model,inner sep=0,outer sep=0,draw=none},
+	language layer foreground/.style={layer,inner sep=0,outer sep=0,no shade,fill=none},
+	]
+	% text
+	\node[language text,name=pl,anchor=north west] {\celltext{\raggedright\emph{language\\(compiler)}}\plbody};
+	\node[language text,name=pm,anchor=north west] at (pl.south west)  {\celltext{\raggedright\emph{programming paradigm}}\pmbody};
+	\node[language text,name=moc,anchor=north west] at (pm.south west) {\celltext{\raggedright\emph{model of computation}}\mocbody};
+	\node[language text,name=cm,anchor=north west] at (moc.south west) {\celltext{\raggedright\emph{concurrency model}}\cmbody};
+	\node[language text,name=mm,anchor=north west] at (cm.south west)  {\celltext{\raggedright\emph{memory model}}\mmbody};
+	% layer background
+	\begin{pgfonlayer}{background}
+		\node[language layer background,fit={(moc)}] {};
+		\node[language layer background,fit={(cm)}] {};
+		\node[language layer background,fit={(mm)}] {};
+	\end{pgfonlayer}
+	% layer foreground
+	\node[language layer foreground,fit={(moc)}] {};
+	\node[language layer foreground,fit={(cm)}] {};
+	\node[language layer foreground,fit={(mm)}] {};
+	% flaps
+	\begin{pgfonlayer}{background}
+		\path (pl.north west) ++(\pmspacing/6,0)
+			\foreach \i in \pmlist {
+				\ifx\i\empty\else
+					++(\pmwidth+\pmspacing,0) let \p1=($(\i)+(0,\platformflapmargin)$) in
+						node[draw,inner sep=0,minimum height=-\y1,minimum width=\pmwidth+\pmspacing/3*2,anchor=north west,flap] {}
+				\fi
+			};
+	\end{pgfonlayer}
+\end{scope}
+\end{platformfig}%

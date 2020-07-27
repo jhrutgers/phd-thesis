@@ -1,0 +1,91 @@
+\begin{tikzpicture}[
+	y=1.5\portablefigunit,
+%
+	axis/.style={draw=black,->,semithick},
+	slot/.style={plain label,minimum height=3\yunit},
+	process/.style={plain label,anchor=mid east,outer xsep=1ex},
+%
+	work/.style={draw=niceblack,fill=black!10,anchor=north west,rounded corners=2pt,},
+	work 1/.style={fill=bar color 1},
+	work 2/.style={fill=bar color 2},
+	work 3/.style={fill=bar color 3},
+]
+
+% slots
+\begin{scope}[
+	x=1.89\portablefigunit,
+	slot boundary/.style={dashed,draw=nicegray},
+	x label/.style={plain label,anchor=north,outer ysep=.3ex},
+]
+	\xdef\lastslotend{0}
+	\node[slot,anchor=south east] (slot 0) at (\lastslotend,0) {};
+%	\node[x label] at (slot 0.south east) {\strut0};
+
+	\foreach \slot/\length in {
+		1/1, 2/1, 3/1, 4/1, 5/1, 6/1, 7/1, 8/1,			 % normal replenishment interval
+		9/.45, 10/.9, 11/1, 12/.55, 13/1, 14/.55, 15/1, 16/1% interrupted
+		}{
+		\path let \p1=(\lastslotend,0), \p2=($(\p1)+(\length,0)$), \n1={\lastslotend+\length}, \n2={\x2-\x1} in
+			(\p1) node[slot,anchor=south west,minimum width=\n2] (slot \slot) {}
+			\pgfextra{\xdef\lastslotend{\n1}};
+		\draw[slot boundary] (slot \slot.south east) -- (slot \slot.north east);
+		\node[x label] at (slot \slot.south) {\strut\slot\expandafter\ifstrequal\expandafter{\length}{1}{}{*}};
+		\xdef\slots{\slot}
+	}
+\end{scope}
+
+% grid
+\draw[axis] (0,.5\pgflinewidth) -- ($(slot \slots.south east)+(0,.5\pgflinewidth)$)
+	node[plain label,midway,anchor=north,outer sep=1.75em] {time (slots)}
+	-- ++(2ex,0);
+\draw[axis] (0,0) -- (slot 0.north east);
+
+% processes
+\node[process] at (0,2.5) {process 2};
+\node[process] at (0,1.5) {process 1};
+\node[process] at (0,.5) {daemon};
+
+% schedule
+\begin{scope}[
+	work/.append style={minimum height=.8\yunit,outer xsep=0,inner sep=0},
+]
+	\def\schedule (#1) at (#2:#3+#4);{
+		\ifundef{\schedulestart}{\gdef\schedulestart{0}}{}
+		\ifstrequal{#3}{?}{\edef\start{\schedulestart}}{\edef\start{#3}}
+		\path let \p1=($(slot \start.south east)+(0,#2)$), \n1={int(\start+#4)}, \p2=($(slot \n1.south east)+(0,#2)$), \n2={\x2-\x1-4\pgflinewidth} in
+			($(\p1)+(2\pgflinewidth,-.1\yunit)$) node[work,work #2/.try,minimum width=\n2,alias=last scheduled] (#1) {}
+			\pgfextra{\xdef\schedulestart{\n1}};
+	}
+	\def\yielded{
+		\begin{scopenode}[plain label,anchor=south west,outer xsep=.2ex,outer ysep=.75ex,at=(last scheduled.south east)]%
+			\ifdef{\yieldsym}{\yieldsym}{$\lightning$}%
+		\end{scopenode}
+	}
+	% normal replenishment interval
+	\schedule (w)  at (1:?+2);
+	\schedule (w)  at (2:?+2);
+	\schedule (w)  at (3:?+4);
+	% interrupted p2
+	\schedule (w)  at (1:?+1);\yielded
+	\schedule (w)  at (2:?+1);\yielded
+	\schedule (m1) at (3:?+1);
+	\schedule (w)  at (1:?+1);\yielded
+	\schedule (m2) at (3:?+1);
+	\schedule (w)  at (1:?+1);\yielded
+	\schedule (m3) at (3:?+2);
+\end{scope}
+
+% labels
+\draw[|-|] ($(slot 1.north west)+(0,\portablefigunit)$) -- ($(slot 8.north east)+(0,\portablefigunit)$)
+	node[plain label,midway,anchor=south,outer sep=.3\portablefigunit] {\strut replenishment interval};
+
+\node[plain label,outer sep=.15\portablefigunit,anchor=south] (msg) at ($(slot 13.north)+(0,1.15\portablefigunit)$) {\strut message arrives};
+\begin{scope}[
+	every edge/.append style={draw,->,shorten >=.25ex},
+]
+	\path (msg.200) edge (m1.80);
+	\path (msg)		edge (m2.120);
+	\path (msg.330) edge (m3);
+\end{scope}
+
+\end{tikzpicture}%

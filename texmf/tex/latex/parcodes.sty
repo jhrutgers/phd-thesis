@@ -1,0 +1,185 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{parcodes}
+
+\newif\ifuselstframe\uselstframefalse
+\newif\ifusedepgraph\usedepgraphfalse
+\DeclareOption{frame}{\uselstframetrue}
+\DeclareOption{depgraph}{\usedepgraphtrue}
+\ProcessOptions
+
+\RequirePackage{varwidth,tikz,ragged2e,environ,adjustbox,portablefig,etoolbox,listings,xargs,booktabs}
+\usetikzlibrary{arrows,decorations.markings}
+
+\newcounter{parproc}
+\ifdef{\newfloat}{}{\PackageError{parcodes}{Memoir required}{}}
+\newfloat[chapter]{lstfloat}{lol}{\lstlistingname}
+
+\ifuselstframe
+	\lstset{frame=tb,abovecaptionskip=\abovecaptionskip,framerule=\heavyrulewidth}% set rule like booktabs
+\fi
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% listings improvements
+
+% generate a proper \caption for listings
+\newcommand{\lstcaption}[2][\caption]{%
+	% sync lstlisting and lstfloat counters
+	\setcounter{lstfloat}{\value{lstlisting}}%
+	\refstepcounter{lstlisting}%
+	% do \caption
+	#1{#2}%
+}
+
+% nice wrapper for an lst environment with proper caption/label/multicol setup
+\newenvironmentx{lstcols}[3][1=,3=tbp]{%
+	\begin{lstfloat}[#3]%
+	\ifdef{\capstart}{\capstart}{}% for package hypcap
+	\lstset{#1}%
+	\let\lstcols@caption\caption%
+	\let\lstcols@label\label%
+	\def\caption##1{%
+		\gdef\lstcols@thecaption{##1}%
+		\def\label####1{\gdef\lstcols@thelabel{####1}}%
+	}%
+	\global\undef\lstcols@thecaption%
+	\global\undef\lstcols@thelabel%
+	\edef\lstcols@numcols{#2}%
+	\ifuselstframe%
+		\lstset{frame=none,aboveskip=0pt,belowskip=-\smallskipamount}%
+		\hrule\@height\heavyrulewidth\@width\textwidth\@depth\z@\relax%
+		\vspace{\lst@frametextsep}%
+		\vspace{-\smallskipamount}%
+	\fi%
+	\expandafter\ifnumequal\expandafter{\lstcols@numcols}{1}{\begingroup}{\begin{multicols}{\lstcols@numcols}}%
+	\ignorespaces%
+}{%
+	\expandafter\ifnumequal\expandafter{\lstcols@numcols}{1}{\endgroup}{\end{multicols}}%
+	\ifuselstframe%
+		\vspace{\smallskipamount}%
+		\vspace{\lst@frametextsep}%
+		\hrule\@height\heavyrulewidth\@width\textwidth\@depth\z@\relax%
+		\vspace{\smallskipamount}%
+	\fi%
+	\ifdef{\lstcols@thecaption}{%
+		\lstcaption[\lstcols@caption]{\lstcols@thecaption}%
+		\ifdef{\lstcols@thelabel}{\lstcols@label{\lstcols@thelabel}}{}%
+	}{}%
+	\end{lstfloat}%
+}
+
+% environment to print code/dependency graphs side-by-side
+\def\specialparparts{}
+\newenvironment{parcodes}[1][tbp]{%
+	\uselstframefalse%
+	\begin{lstcols}{1}[#1]%
+		\abnormalparskip{0pt}%
+		\begin{portablefig}%
+			\setcounter{parproc}{1}%
+			\undef\firstpar%
+			% horizontal boxes
+			\newenvironment{parpart}[2]{%
+				\ifdef{\firstpar}{%
+					\hspace{0pt plus 1fil}%
+					\lstset{firstnumber=last}%
+				}{%
+					\vskip 3pt%
+				}%
+%				\begin{adjustbox}{frame=.5pt -.5pt}%
+					\begin{minipage}[t]{##2}%
+						\if\relax\detokenize{##1}\relax\else\tikz[baseline=0]{\node[anchor=base west,inner sep=0,outer sep=0]{\strut\textit{##1}};}\hrule\fi%
+			}{%
+					\end{minipage}\xdef\firstpar{1}%
+%				\end{adjustbox}%
+			}%
+			% vertical boxes
+			\newenvironment{parcol}[1]{%
+				\begin{parpart}{}{##1}%
+					\undef\firstpar%
+%					\vspace{-1em}%
+					\Centering%
+			}{%
+				\end{parpart}%
+			}%
+			% specialized boxes
+			\specialparparts%
+}{%
+		\end{portablefig}%
+	\end{lstcols}%
+}
+
+% parpart for parallel processes
+\appto\specialparparts{%
+	\newenvironment{parcode}[2][]{%
+		\lstset{frame=none}%
+		\begin{parpart}{\ifx\\#1\\Process~\arabic{parproc}:\else#1\fi}{#2}%
+	}{%
+		\end{parpart}%
+		\addtocounter{parproc}{1}%
+	}%
+}
+
+% parpart for figure
+\appto\specialparparts{%
+	\newenvironment{parfig}[2][]{%
+		\begin{parpart}{}{#2}\centering%
+			\begin{adjustbox}{warn width,max width=\linewidth}%
+				\begin{tikzpicture}[%
+					portable fig,%
+					baseline={($(current bounding box.north)+(0,-.7em)$)},%
+					#1%
+				]%
+	}{%
+%					\draw (current bounding box.north west) rectangle (current bounding box.south east);
+				\end{tikzpicture}%
+			\end{adjustbox}%
+		\end{parpart}%
+	}%
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% dependency graphs
+
+\ifusedepgraph
+
+\tikzset{
+	depgraph cmds/.code={%
+		\providecommand{\opnode}[3][]{\node[op,name=##2,##1] {\textit{\cref{l:node_##2}:}\\##3};}%
+		\providecommand{\initnode}[3][]{\node[init,name=##2,##1] {\textit{init:}\\##3};}%
+	},
+	depgraph/.style={
+		pseudo op/.style={shape=circle,fill=green!20!blue!15,draw,inner sep=1pt,anchor=center},
+		op/.style={pseudo op,inner sep=0pt,wrap text,minimum size=3.5\portablefigunit,text width=2.35\portablefigunit,node distance=2\portablefigunit},
+		init/.style={op,fill=blue!10!black!10},
+%
+		depend/.style={draw,->},
+		reverse/.style={<-},
+		global/.style={depend,thick},
+		local/.style={depend,semithick,nicegray,every edge/.append style={decoration={snake,amplitude=.3ex,segment length=1ex,post length=1.5ex},decorate}},
+		implicit/.style={depend,densely dotted,black,thick},
+%
+		possibly/.style={implicit,nicegray},
+		invisibly/.style={implicit},
+		locally/.style={local},
+		observe/.style={depend,densely dashed,font=\itshape},
+%
+		label/.style={inner sep=0pt,black,outer ysep=0pt,outer xsep=.5ex,wrap text,max text width=15ex},
+		label right/.style={label,auto=right},
+		label left/.style={label,auto=left},
+		tight/.style={no wrap text,outer ysep=.25ex},
+%
+		depgraph cmds,
+	},
+}
+
+% parpart for dependency graph
+\appto\specialparparts{%
+	\newenvironment{pardep}[2][]{%
+		\begin{parfig}[depgraph,#1]{#2}%
+	}{%
+		\end{parfig}%
+	}%
+}
+
+\fi% depgraph
+

@@ -1,0 +1,93 @@
+\documentclass{src/template/phdthesis}
+\usepackage{mylegend}
+
+% Hyphenation helpers
+\hyphenation{off-load off-load-ing back-pres-sure}
+
+\input{src/acronyms}
+\input{src/symbols}
+\makeglossaries
+
+\input{src/body/platform_fig}
+
+% some thoughts
+\addthought{
+	The universe is inherently parallel, and laws of nature are applied everywhere without computational effort and error margin.
+	Why is it that hard for a computer in the same universe to do a universe-compatible N-body simulation?
+}
+\addthought{
+	What is the point of reasoning about performance of a program, when that program still contains bugs?
+	Can a C program really be considered efficient, if nobody knows whether it is bug-free?
+}
+\addthought{
+	What is `smart' about a smartphone when it lacks the fundamental property of intelligence, namely an understanding of the environment?
+	It never knows what I want; I always have to tell it what to do next\ldots
+}
+\addthought{
+	Can a computer make errors?
+	It only behaves according to the physical arrangement of matter, which is subject to the laws of nature.
+	It is just that a `broken' computer does not live up to the expectations of the user\ldots
+}
+\addthought{
+	Concurrency cannot be invented by a programmer; it only makes his job harder.
+}
+%\infinitethought{
+%	more thoughts
+%}
+
+\index{loop!endless|see{endless loop}}
+\index{endless loop|see{loop, endless}}
+\index{recursion|seealso{recursion}}
+\index{easter eggs|see{somewhere}}
+
+\begin{document}
+
+\frontmatter
+
+\selectlanguage{english}
+\include{src/front/colophon}
+\selectlanguage{dutch}
+\include{src/front/titlepage}
+%\include{src/front/dedication}
+
+\selectlanguage{english}
+\resetacr
+\includechapter{src/front/abstract}
+\selectlanguage{dutch}
+\resetacr
+\includechapter{src/front/samenvatting}
+\includechapter{src/front/acknowledgment}
+
+\selectlanguage{english}
+\formattedTOC
+%\formattedLOF
+%\formattedLOT
+
+\mainmatter
+\resetacr
+
+\includechapter{src/body/1_introduction}
+\includechapter{src/body/2_starburst}
+\includechapter{src/body/3_programming_model}
+\includechapter{src/body/4_hardware}
+\includechapter{src/body/5_memory}
+\includechapter{src/body/6_concurrency}
+\includechapter{src/body/7_conclusion}
+
+\appendix
+%\includechapter{src/body/date2012_ideas}
+%\includechapter{src/body/atomic_once}
+\includechapter{src/body/etymology}
+
+\backmatter
+\listofacronyms
+\listofreferences
+\listofpublications
+\formattedindex%
+\listoftodos%
+\ifdiscussion%
+	\include{src/back/colortest}%
+\fi%
+
+\includestellingen%
+\end{document}

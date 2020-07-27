@@ -1,0 +1,202 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Setup
+%%
+\pgfplotscreateplotcyclelist{scaling}{
+	chart color 1,	solid,																			mark=none		\\%
+	chart color 5,	solid,	every mark/.append style={scale=.75,fill=chart color 5},				mark=square*	\\%
+	chart color 5,	solid,	every mark/.append style={scale=.75,},									mark=square		\\%
+	chart color 4,	solid,	every mark/.append style={scale=.75,fill=chart color 4},				mark=*			\\%
+	chart color 4,	solid,	every mark/.append style={scale=.75,},									mark=o			\\%
+	chart color 3,	solid,	every mark/.append style={scale=.85,fill=chart color 3},				mark=triangle*	\\%
+%	chart color 3,	solid,	every mark/.append style={scale=.85,},									mark=triangle	\\%
+	chart color 2,	solid,	every mark/.append style={scale=.75,},									mark=x			\\%
+}%
+%\pgfplotsset{width=.54\linewidth,height=.53\linewidth}%
+\pgfplotsset{x=1.325mm,y=1.325mm}%
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Scaling plot
+%%
+\newcommand{\nofibscaling}[1]{%
+\tikz[remember picture]{\node (lastscalefig) {%
+\begin{tikzpicture}
+	\pgfplotsset{
+		ymin=0,ymax=32,xmin=0,xmax=32,
+		every axis/.append style={cycle list name=scaling},
+		ht/.style={x filter/.code={\ifnum\pgfmathresult<12\def\pgfmathresult{}\fi},filter discard warning=false},
+		noht/.style={x filter/.code={\ifnum\pgfmathresult>12\def\pgfmathresult{}\fi},filter discard warning=false},
+	}
+	% linear
+	\begin{axis}[
+		xlabel=Number of cores,
+		ylabel={\strut Speedup},
+		xtick={0,4,8,12,16,20,24,28,32},
+		ytick={0,4,8,12,16,20,24,28,32},
+%		ylabel style={yshift={-4ex}},
+		xlabel style={yshift={-1ex}},
+		grid=major,
+%		legend pos=north west,
+%		legend style={font=\scriptsize,cells={anchor=west}},
+	]
+	\addplot+[smooth,domain=1:32,y domain=0:1] {x};
+%	\addplot+ coordinates{(-1,-1)};
+%	\addplot+ coordinates{(-1,-1)};
+%	\addplot+ coordinates{(-1,-1)};
+%	\addplot+ coordinates{(-1,-1)};
+%	\addlegendentry{linear}
+%	\addlegendentry{\texttt{ghc} (x86)}
+%	\addlegendentry{ours (x86)}
+%	\addlegendentry{ours (MB)}
+%	\addlegendentry{fast mem}
+	\end{axis}
+	% ghc ht
+	\begin{axis}[xtick=\empty,ytick=\empty,cycle list shift=2,ht]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-hs.dat}\datfile
+	\addplot+ table[x index=0,y expr=\thisrowno{5}] \datfile;
+	\end{axis}
+	% ghc
+	\begin{axis}[xtick=\empty,ytick=\empty,cycle list shift=1,noht]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-hs.dat}\datfile
+	\addplot+ table[x index=0,y expr=\thisrowno{5}] \datfile;
+	\end{axis}
+	% mb
+	\begin{axis}[xtick=\empty,ytick=\empty,cycle list shift=5]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-mb.dat}\datfile
+	\addplot+ table[x index=0,y expr=\thisrowno{8}] \datfile;
+	\end{axis}
+	% lc ht
+	\begin{axis}[xtick=\empty,ytick=\empty,cycle list shift=4,ht]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-lc.dat}\datfile
+	\addplot+ table[x index=0,y expr=\thisrowno{5}] \datfile;
+	\end{axis}
+	% lc
+	\begin{axis}[xtick=\empty,ytick=\empty,cycle list shift=3,noht]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-lc.dat}\datfile
+	\addplot+ table[x index=0,y expr=\thisrowno{5}] \datfile;
+	\end{axis}
+	% lc, compensated against slower memory
+	\begin{axis}[xtick=\empty,ytick=\empty,cycle list shift=6]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-lc.dat}\datfile
+	\addplot+ table[x index=0,y expr=\thisrowno{7}] \datfile;
+	\end{axis}
+\end{tikzpicture}};}}%
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Term plot
+%%
+\newcommand{\nofibterms}[1]{%
+\begin{tikzpicture}
+	\begin{axis}[
+		xlabel=Number of cores,
+		ylabel={\strut Term count},
+		xtick={1,2,4,8,16,24},
+		legend pos=north west,
+		ybar stacked,
+		bar width=1mm,
+		ymin=0,
+		reverse legend,
+		legend style={font=\scriptsize},
+		legend pos=south east,
+	]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-stats.dat}\datfile
+	\addplot+ table[x index=7,y expr=\thisrowno{0}-\thisrowno{3}] \datfile;\addlegendentry{local const}
+	\addplot+ table[x index=7,y index=3] \datfile;\addlegendentry{local appl}
+	\addplot+ table[x index=7,y expr=\thisrowno{1}-\thisrowno{5}] \datfile;\addlegendentry{globals}
+	\addplot+ table[x index=7,y index=5] \datfile;\addlegendentry{doubles}
+	\end{axis}
+\end{tikzpicture}}%
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Phases plot
+%%
+\newcommand{\nofibphases}[1]{%
+\begin{tikzpicture}
+	\begin{axis}[
+		xlabel=Number of cores,
+		ylabel={\strut Time spent (normalized)},
+		xtick={1,2,4,8,16,24},
+		legend pos=south east,
+		ybar stacked,
+		bar width=1mm,
+		ymin=0,
+		reverse legend,
+	]
+	\pgfplotstableread[col sep=comma]{data/conc_#1-phase.dat}\datfile
+	\addplot+ table[x index=0,y expr=\thisrowno{1}/\thisrowno{6}] \datfile;\addlegendentry{running}
+	\addplot+ table[x index=0,y expr=\thisrowno{2}/\thisrowno{6}] \datfile;\addlegendentry{idle}
+	\addplot+ table[x index=0,y expr=\thisrowno{5}/\thisrowno{6}] \datfile;\addlegendentry{stalling}
+	\addplot+ table[x index=0,y expr=\thisrowno{3}/\thisrowno{6}] \datfile;\addlegendentry{local gc}
+	\addplot+ table[x index=0,y expr=\thisrowno{4}/\thisrowno{6}] \datfile;\addlegendentry{global gc}
+	\end{axis}
+\end{tikzpicture}}%
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Legend 'plot'
+%%
+\newcommand{\nofiblegend}{%
+\tikz{\node[inner sep=0]{%
+\begin{tikzpicture}
+	\path[use as bounding box]
+		let \p1=(lastscalefig.north west), \p2=(lastscalefig.south east), \n1={(\x2-\x1)/2}, \n2={(\y1-\y2)/2} in 
+		(-\n1,\n2) rectangle (\n1,-\n2);
+	\begin{axis}[
+		anchor=center,
+		at={(.5em,0)},
+		width=4cm,
+		hide axis=true,cycle list name=scaling,
+		legend style={name=leg,draw=none,at={(.5,.5)},anchor=center,cells={anchor=west},},
+	]
+	\addplot+ coordinates{(0,0)};
+	\addplot+ coordinates{(0,0)};
+	\addplot+ coordinates{(0,0)};
+	\addplot+ coordinates{(0,0)};
+	\addplot+ coordinates{(0,0)};
+	\addplot+ coordinates{(0,0)};
+	\addplot+ coordinates{(0,0)};
+	\addlegendentry{linear speedup}
+	\addlegendentry{\thecmd{ghc} (x86)}
+	\addlegendentry{\thecmd{ghc} (x86, hyperthreaded)}
+	\addlegendentry{\ourfp (x86)}
+	\addlegendentry{\ourfp (x86, hyperthreaded)}
+	\addlegendentry{\ourfp (\MicroBlaze)}
+	\addlegendentry{\ourfp (x86), w/o bottleneck}
+	\end{axis}
+\end{tikzpicture}};}}%
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Wrapper commands
+%%
+\newcommand{\subfigwrapped}[3][0pt]{\begin{tikzpicture}%[outline figure]
+	\node[anchor=south,inner sep=0,outer sep=0] at (0,0) {#3};\node[anchor=north,outer sep=-4pt] at (0,-.5em) {\strut#2};
+%	\path[use as bounding box] ($(current bounding box.north west)+(-#1,0)$) rectangle ($(current bounding box.south east)+(#1,0)$);
+\end{tikzpicture}}%
+%
+\newcommand{\nofibapp}[1]{%
+\begin{figure}
+\subfigwrapped{(a) scaling}{\nofibscaling{#1}}%
+\subfigwrapped{(b) terms}{\nofibterms{#1}}%
+\subfigwrapped{(c) phases}{\nofibphases{#1}}%
+\caption{\texttt{#1}}
+\end{figure}}%
+%
+\newcommand{\nofibscalingfig}[1]{\begin{figure}\nofibscaling{#1}\caption{\texttt{#1}: scaling}\end{figure}}%
+\newcommand{\nofibtermsfig}[1]{\begin{figure}\nofibterms{#1}\caption{\texttt{#1}: terms}\end{figure}}%
+\newcommand{\nofibphasesfig}[1]{\begin{figure}\nofibphases{#1}\caption{\texttt{#1}: phases}\end{figure}}%
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Actual scaling subfigs
+%%
+\subfigwrapped{(a) \theapp{coins}}{\nofibscaling{coins}}\hfill%
+\subfigwrapped{(b) \theapp{parfib}}{\nofibscaling{parfib}}\\%
+\subfigwrapped{(c) \theapp{partak}}{\nofibscaling{partak}}\hfill%
+\subfigwrapped{(d) \theapp{prsa}}{\nofibscaling{prsa}}\\%
+\subfigwrapped{(e) \theapp{queens}}{\nofibscaling{queens}}\hfill%
+\subfigwrapped{Legend}{\nofiblegend}%
+%
+%\nofibapp{coins}
+%\nofibapp{parfib}
+%\nofibapp{partak}
+%\nofibapp{prsa}
+%\nofibapp{queens}
+%%\nofibapp{quicksort}
+%

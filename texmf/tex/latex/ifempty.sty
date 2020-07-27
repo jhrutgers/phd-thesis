@@ -1,0 +1,6 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{ifempty}
+
+\providecommand{\ifempty}[1]{\edef\arg{#1}\expandafter\if\expandafter\relax\expandafter\detokenize\expandafter{\arg}\relax}
+\providecommand{\ifemptyarg}[1]{\if\relax\detokenize{#1}\relax}
+

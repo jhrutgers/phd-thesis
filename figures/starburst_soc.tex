@@ -1,0 +1,73 @@
+\inputonce{figures/arch_style}%
+\begin{tikzpicture}[
+	component/.append style={minimum height=2em},
+	tile/.style={core,text width=10ex,minimum height=4em},
+	peripheral/.append style={text width=9.2ex},
+	memory/.append style={text width=9.2ex},
+	remember picture,
+]
+
+% MicroBlaze tiles
+\node[tile] (mb0) {tile 0 (see \cref{fig:starburst:tile})};
+\node[tile,anchor=west] (mb1) at ($(mb0.east)+(\portablefigunit,0)$) {tile 1};
+\node[plain label,anchor=west] (mbs) at ($(mb1.east)+(\portablefigunit,0)$) {$\cdots$};
+\node[tile,anchor=west] (mbn) at ($(mbs.east)+(\portablefigunit,0)$) {tile 31};
+\node[tile,anchor=west] (mbl) at ($(mbn.east)+(\portablefigunit,0)$) {tile for Linux};
+
+% 'tree'
+\path let \p1=(mb0.south west), \p2=(mbl.south east), \n1={\x2-\x1} in
+	($(\p1)+(0,-\portablefigunit)$) node[interconnect,anchor=north west,minimum width=\n1] (tree) {core-to-memory/peripherals interconnect};
+\draw[connection] (mb0.south) -- +(0,-\portablefigunit);
+\draw[connection] (mb1.south) -- +(0,-\portablefigunit);
+\draw[connection] (mbn.south) -- +(0,-\portablefigunit);
+\draw[connection] (mbl.south) -- +(0,-\portablefigunit);
+
+% 'ring'
+\path let \p1=(mb0.north west), \p2=(mbl.north east), \n1={\x2-\x1} in
+	($(\p1)+(0,\portablefigunit)$) node[interconnect,anchor=south west,minimum width=\n1] (ring) {core-to-core interconnect};
+\newcommand{\ringconnection}[1]{
+	\draw[connection] ($(#1.north)+(-.33\portablefigunit,0)$) -- +(0,\portablefigunit);
+	\draw[connection] ($(#1.north)+(.33\portablefigunit,\portablefigunit)$) -- +(0,-\portablefigunit);
+}
+\ringconnection{mb0}
+\ringconnection{mb1}
+\ringconnection{mbn}
+\ringconnection{mbl}
+
+% peripherals
+\def\closer{.7}
+\begin{scopenode}[anchor=north,inner sep=0,at={($(tree.south)+(0,-\portablefigunit)$)}]
+	\node[memory] (ddr) {\SI{256}{\mega\byte} \acs{DDR}3};
+	\node[peripheral,anchor=north west] (dvi)		at ($(ddr.north east)+(\portablefigunit,0)$)							{\acs{DVI}};
+	\node[peripheral,anchor=north]		(uart)		at ($(dvi.south east)+(.5\portablefigunit,-\closer\portablefigunit)$)	{\acs{UART}};
+	\node[peripheral,anchor=north west] (leds)		at ($(dvi.north east)+(\portablefigunit,0)$)							{\noacp{LED}};
+	\node[peripheral,anchor=north]		(buttons)	at ($(leds.south east)+(.5\portablefigunit,-\closer\portablefigunit)$)	{buttons};
+	\node[component,anchor=north west]	(clock)		at ($(leds.north east)+(\portablefigunit,0)$)							{clock};
+	\fixboundingbox
+	\def\connect (#1);{
+		\draw[connection] let \p{noc}=(tree.south), \p{periph}=(#1.north), \n{up}={\y{noc}-\y{periph}} in (\p{periph}) ++(0,\n{up}) -- ++(0,-\n{up});
+	}
+			
+	\draw[connection] (dvi.west) -- ++(-\portablefigunit,0);
+	\connect (ddr);
+	\connect (uart);
+	\connect (dvi);
+	\connect (leds);
+	\connect (buttons);
+	\connect (clock);
+\end{scopenode}
+
+% Linux peripherals
+\begin{scopenode}[anchor=west,inner sep=0,at={($(mbl.east)+(\portablefigunit,0)$)}]
+	\node[memory] (flash) {\CompactFlash};
+	\node[peripheral,anchor=north] (eth) at ($(flash.south)+(0,-\closer\portablefigunit)$) {Ethernet};
+	\node[peripheral,anchor=north] (usb) at ($(eth.south)+(0,-\closer\portablefigunit)$) {\acs{USB}};
+	\node[peripheral,anchor=north] (lcd) at ($(usb.south)+(0,-\closer\portablefigunit)$) {\noac{LCD}};
+	\fixboundingbox
+	\draw[connection] (mbl) -- (eth);
+	\draw[connection] (mbl) -- (flash);
+	\draw[connection] (mbl) -- (usb);
+	\draw[connection] (mbl) -- (lcd.155);
+\end{scopenode}
+
+\end{tikzpicture}%

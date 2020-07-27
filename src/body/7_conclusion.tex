@@ -1,0 +1,186 @@
+\setaachaptext[50]{a concluding conclusion chapter that concludes}
+\chapter{Conclusion}
+\label{c:conclusion}
+
+%\begin{abstract}%
+%\Codesign of multiple abstraction layers in the platform is essential to establish a proper architecture.
+%What is `proper' depends on the objective of the system.
+%In many-core architectures, trends are directed towards a weak memory model and preferably atomic-free concurrency.
+%This thesis proposes to remove the memory model and concurrency model from the programming model, such that they are hidden from the programmer.
+%As a result, it reduces the complexity of programming such an architecture, but still allows the hardware to be scalable.
+%\end{abstract}
+
+Processors comprise an increasing number of cores.
+This trend constantly pushes hardware and software to their limits, and therefore forces both worlds to change.
+This thesis addresses several prominent issues related to hardware, software, and their interplay.
+
+The hardware architecture drastically changes when the core count is increased.
+Where a few cores can share hardware resources relatively easily, many-core architectures face multiple issues that are related to an increased latency of communication.
+Latency between a core and the background memory is increased, because traversing the \ac{NoC} takes multiple clock cycles.
+Furthermore, as shown in \cref{c:trends}, off-chip bandwidth to background memory cannot keep up with the growth of the memory bandwidth demands of all cores combined.
+As a result, shared \ac{SDRAM} bandwidth becomes a scarce resource.
+
+Most commercial many-core architectures include multiple levels of cache to keep as much code and data as possible close to the core that might need it.
+This setup offers a single shared-memory address space to software, but relies on coherency of the caches.
+It is complicated to realize coherency in hardware that requires multiple cycles to communicate a pending write, for example.
+From a software perspective, it is convenient when state changes happen instantly.
+However, concessions are made to the ease of use of such a memory architecture, as `instantly' is hard to realize.
+Allowing a transient state, or even non-determinism in `the' state of the memory, is easier to build, and therefore cheaper, and often allows a higher performance---a weak memory model is preferred over a strong one.
+A few architectures abandon hardware cache coherency altogether, or use \aclp{SPM} instead, and rely on software to communicate data between cores.
+
+How to program such an architecture remains an open problem.
+Threading is a well-known concurrency model, and sounds like a straightforward way to exploit processing power of a parallel machine.
+Moreover, it fits to popular (imperative) programming languages.
+However, threading assumes communication via shared memory.
+As hardware tends to use weak memory models, this memory behaves in a non-straightforward way.
+Moreover, threading requires the programmer to split the computational task into chunks, and orchestrate the interaction manually.
+Manually programming threads on a few-core \ac{SPM} processor might be viable, manually programming threads on a many-core architecture with a weak memory model is troublesome.
+Remarkably, all commercial platforms support (and advice) to program the platform using threads.
+
+Hardware and software seems to be two separate worlds; hardware is often concerned with the behavior and performance of micro-architectural events or a single instruction, where software abstracts from the underlying hardware as much as possible.
+However, there is as much truth in the opposite of this separation.
+The behavior of a platform depends on how hardware and software interact, and how hardware abstractions match software models.
+In \cref{c:progmodel}, we discuss the relation of several abstraction layers: the memory model, the concurrency model, and the model of computation.
+A platform can be seen as the combination of the hardware and a specific set of abstraction layers on top, including the available compilers and run-time software that implement these layers.
+The programming model, of which the programming paradigm is a property of, can be seen as a peephole view on the platform.
+In turn, a programming language is an incarnation of the programming model, of which the specific form is determined by syntax, a type system, \etc.
+The platform exposes details via the programming model to the programmer, which are essential to write application software.
+When many details are exposed, a programmer has full control over the behavior of the application, at the cost of work to fill in and control all these details, which can be error-prone.
+On the other hand, programming becomes easier when most details are hidden from the programmer, at the cost of possible overhead.
+
+\Cref{c:hardware} presents optimizations in the many-core context, which are hidden from the programmer, namely the interconnect architecture and the implementation of synchronization.
+The interconnect is designed such that it is scalable in terms of hardware costs and performance.
+Synchronization, \ie a mutex, is implemented such that it bypasses shared memory, and therefore relieves the memory bottleneck.
+From a programming point of view, the interface does not change, but there is a different trade-off how software should use the platform.
+For example, direct core-to-core (\ac{FIFO}) communication is faster than communicating via shared memory, but data elements are limited in size.
+Additionally, locking an unlocked mutex is faster when it is done by the same process consecutively, than when multiple processes share the mutex---a higher locality of a mutex is preferred.
+Hence, these optimizations do not change the programming model, but might change the way how a programmer thinks about costs of operations, which in turn influences how a programmer uses the platform.
+
+\glsreset{PMC}
+
+The techniques, as discussed in \cref{c:memory}, do change the programming model.
+A C~programmer usually writes specific code for the target platform at hand, such as a fence to order store operations, and a cache flush to achieve coherency.
+This approach is not portable.
+For example, moving from an Intel to an \noac{ARM} processor might require considerable modifications to the application.
+The chapter presents \ac{PMC}, which abstracts from the memory model of the hardware.
+Then, the application's source code does not contain hardware-specific memory operations anymore.
+As a result, the programmer does not need to know the targeted memory model.
+The annotations required for \ac{PMC} are directly related to the algorithm that is implemented.
+Therefore, the hardware's memory model is removed from the programming model, and \ac{PMC} can be seen as a property of the abstract machine of the programming model.
+The translation from \ac{PMC} to the actual hardware is done automatically.
+The key aspect of this abstraction is that it fits both the architecture trends of the underlying many-core hardware, and the requirements by the concurrency model on top.
+
+Excluding the memory model of the hardware from the programming model, as discussed above, eliminates the chance to introduce bugs that are related to this memory model.
+Ideally, the concurrency model is excluded in the same way.
+Then, an application only defines the algorithm in terms defined by the model of computation, after which tooling can introduce concurrency automatically.
+The model of computation influences to what extent extracting concurrency is possible.
+In \cref{c:hardware,c:memory}, we used a programming model based on C.
+The abstract machine of C is based on the register machine model.
+However, a register machine is sequential in nature.
+Extracting concurrency from a sequential description is not straightforward.
+Therefore, it is easier to change the model of computation in order to hide the concurrency model.
+
+In \cref{c:concurrency}, we use \lcalc instead.
+This model does not define sequences of operations, but only dependencies and a rule that defines how to compute, which can be applied concurrently to the program.
+As a result, the compiler can analyze the program properly, after which the program can be executed using a concurrency model that suits the platform.
+In contrast, the (data) dependencies in a program written in C are often implicit and therefore unknown to the compiler, which makes transformations regarding concurrency compromise the functionality of the program.
+\Lcalc has the property that the computation of every expression is side-effect free; the outcome is always the same, regardless the state of the rest of the system.
+Therefore, this model of computation allows data races in distribution and communication of the computational load among cores.
+We show that it even allows atomic-free execution, where the program does not rely on any atomic sequence of reads and writes.
+This affects the underlying models: the memory subsystem does not have to guarantee a total order of specific state changes, and the hardware does not have to support atomic \acl{RMW} operations.
+Similar to \ac{PMC}, a change in the model of computation influences other abstraction layers of the platform.
+Specifically, the requirements on the hardware are relaxed by means of atomic-free execution.
+
+The central \ix[problem statement]{problem} this thesis addresses, as formulated in \cref{s:intro:problem}, is:
+\begin{emphasize}
+\ifdef{\theproblem}{\theproblem}{??}
+\end{emphasize}
+
+The answer is that \codesign* of all abstraction layers of the platform and the programming model is required, such that the implementation as a whole matches the targeted properties of the system.
+The trends in hardware, as discussed in \cref{c:trends}, are reflected by these properties: shared memory is a scarce resource, data locality is important, a weak memory model used, and cache coherency (or \acl{SPM} management) relies on software.
+To reduce the programming complexity, abstractions are needed that allow tooling to handle as much low-level properties as possible, such as software cache coherency and control over concurrency and synchronization.
+In terms of the platform model, as presented in \cref{c:progmodel}, the overlap of the programming model should be as small as possible to make programming many-core systems easier.
+However, there is no single `perfect' platform or programming model, since it depends on the purpose of the system.
+
+
+\section{Contributions}
+
+The main \ix{contributions} of this thesis are:
+
+\begin{itemize}
+\item \emph{A coherent integration of several \ix[abstraction layer]{abstraction layers} in a \ix{platform} model and programming model}\\
+	A platform integrates the memory model, concurrency model, model of computation, and software in between to implement the conversion between all layers.
+	This software includes the \ac{OS}, \acl{RTS}, and compilers.
+	The view a programmer has of the platform is captured by the programming model.
+	This framework structures design choices and \ix[trade-off]{trade-offs} of the implementation of all layers.
+	(\Cref{c:progmodel})
+\item \emph{\Warpfield*, a scalable connectionless tree-shaped interconnect and ring}\\
+	The hardware costs of \Warpfield scale linearly to the number of cores.
+	This is a significant improvement over a connection-oriented network, which scales quadratic to the number of cores, as hardware resources are reserved for every pair of cores.
+	Moreover, the performance of applications that communicate to shared memory via \Warpfield, scales close to linear, as long as the memory bandwidth is not the bottleneck.
+	Although \Warpfield is connectionless and work-conserving, it has been shown that the packet latency through the tree-shaped network is bounded.
+	Therefore, \Warpfield is usable in a real-time context.
+	(\Cref{c:hardware})
+\item \emph{A \ix{distributed lock} algorithm that exploits mutex locality and local memories}\\
+	Our lock algorithm bypasses shared memory, which is often a bottleneck in a many-core system.
+	It uses message passing and the local (scratchpad) memories next to the core.
+	This way, a mutex is realized, based on posted writes, and reads from a local memory only.
+	(\Cref{c:hardware})
+\item \emph{\acfix{PMC}, a memory model abstraction}\\
+	\Ac{PMC} combines the requirements of threading and an imperative programming approach, and a many-core architecture with a weak memory model.
+	It abstracts from the memory model of the hardware, and is therefore portable between architectures with different memory models.
+	\Ac{PMC} defines a memory model that is as weak as possible to allow maximum performance of the implementation, but strong enough to be able to simulate \acl{SC} for data-race free applications.
+	Moreover, the annotations of \ac{PMC} allow a transparent implementation for common memory architectures, including software cache coherency and \aclp{SPM}.
+	Therefore, \ac{PMC} is the result of \codesign of many-core hardware and the (threaded) concurrency model.
+	(\Cref{c:memory})
+\item \emph{Scalable \ix{atomic-free} implementation of \lcalc}\\
+	We implemented \ourfp*, a functional language that closely follows the principles of \lcalc.
+	The rules that are derived from these principles allow atomic-free execution.
+	Additionally, data races are introduced very carefully, which leads to non-determinism in the execution.
+	However, this does not influence the outcome of the program.
+	This shows that \keyinsight{\codesign} based on the model of computation, concurrency model, and the memory model can lead to a property---in this case atomic-freedom---that could not have been realized by optimizations on any sole abstraction layer.
+	However, this property is crucial in scalable many-core architectures.
+	(\Cref{c:concurrency})
+\item \emph{\Starburst*, a many-core \MicroBlaze system on \ac{FPGA}}\\
+	Experiments are conducted on \Starburst, which allows evaluation of the presented techniques in an environment that can be considered as harsh for C.
+	It only supports a weak memory model, and it does not have hardware cache coherency and atomic \acl{RMW} instructions.
+	In the current implementation, the shared memory bandwidth is a performance bottleneck.
+	The project includes a flow that generates a \ac{SoC}, given an architecture description that defines the type and number of cores and peripherals.
+	Having this setup and actual applications running on an \ac{FPGA} allows running long experiments at a speed that cannot be achieved in simulation.
+	(\Cref{c:starburst})
+\end{itemize}
+
+
+\section{Recommendations for future work}
+
+In \cref{c:concurrency}, we used a programming model based on \lcalc to hide all lower layers from the programmer.
+The chapter showed that it is possible to do so, but did not address the performance loss due to the overhead of the abstraction.
+This is in contrast to \ac{PMC}, which is designed such that the abstraction layer minimizes the amount of overhead it incurs.
+\ix[future work]{Future work} should focus on this overhead.
+It is likely that the overhead is reduced considerably, when our compiler could optimize the program on a functional level.
+In practical solutions, streamlining programming by abstractions is only viable when these abstractions still allow performance optimizations or cost analysis, which can achieve an equivalent performance as hand-written or -optimized code.
+
+At the moment, \Starburst is a homogeneous system, based on general-purpose cores.
+In embedded systems, a system has usually a specific application domain.
+For such a domain, it is often beneficial to add hardware accelerators to the \ac{SoC}, such as an \noac{FFT} component for \noac{DSP} applications.
+Offloading tasks to accelerators, or even sharing accelerators by multiple processes, is now mostly a manual job.
+However, many complex questions regarding abstractions, compilation, and mapping remain open.
+For example, it is often good to map processes that intensively use an accelerator, physically close to that accelerator.
+Moreover, data streams to the accelerator and back to the (general-purpose) core can have a larger bandwidth than what core-to-core streams require, which could affect routing of these streams.
+It is unclear whether or how communication intensity and the related requirements and trade-offs can be determined automatically.
+Handling accelerators, or heterogeneity in general, is currently not defined by the platform model in this thesis.
+Future work might address accelerators from a programming perspective, such that the abstraction layer is able to hide mapping, routing, and sharing transparently, in a similar way as this thesis hides the hardware's memory model and the concurrency model.
+
+Currently, the abstraction layers of the platform model only include functional aspects of the system.
+Non-functional aspects, such as timing, memory usage, and power usage, are not included.
+Since it is not possible to define non-functional constraints, compilers cannot take these non-functional aspects into account---a high performance is the usual optimization direction during compilation or execution.
+Future work might extend the platform model to include these aspects.
+It is quite probable that different non-functional aspects should be handled very differently.
+To address timing, for example, the maximum response time of the system might be included in the model of computation.
+The exact memory usage might be irrelevant, but the total memory usage should at least be lower than the total amount of memory in the system.
+On the other hand, (low) power usage could be just an optimization goal, but might also be subject to a strict budget.
+Integration of these aspects into the platform could give a better, or even automated, control over them.
+
+In the suggestions above, it is essential to realize that optimizations at any level of a system influence other parts of the system.
+An efficient or properly balanced many-core architecture is unlikely to be achieved without \codesign of multiple models, implementations of abstraction layers, and programming interfaces.
+

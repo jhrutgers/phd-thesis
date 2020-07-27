@@ -1,0 +1,47 @@
+\pgfplotstableset{create on use/x/.style={create col/set list={0.8,1.2,1.8,2.2,2.8,3.2,3.8,4.2}}}%
+\input{figures/hw_lock_traffic_style}%
+\pgfplotstableread{data/hw_lock_traffic.dat}\memstats%
+\begin{tikzpicture}
+	\begin{axis}[
+		lock bar plot relative,
+		width=.6\linewidth,
+		name=distmem,
+		anchor=north west,
+		ylabel={\strut Distribution of time over operations (\si{\percent})},
+		bar width=2.75ex,
+	]
+		\addplot[bar icache read] table[x=x,y={icache read pct}] from \memstats;
+		\addplot[bar dcache read] table[x=x,y={dcache read pct}] from \memstats;
+		\addplot[bar mutex read] table[x=x,y={mutex read pct}] from \memstats;
+		\addplot[bar uncached read] table[x=x,y={uncached read pct}] from \memstats;
+		\addplot[bar write] table[x=x,y={write pct}] from \memstats;
+		%\addplot[bar spare] table[x=x,y={spare pct}] from \memstats;
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:0.8,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:1.2,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:1.8,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:2.2,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:2.8,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:3.2,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:3.8,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] \foreach \i in {1,2,...,100} { ($(axis cs:4.2,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:0.8,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:1.2,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:1.8,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:2.2,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:2.8,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:3.2,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:3.8,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+		\path[fill=white,draw,color=black] coordinate (a) at ($(axis cs:4.2,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),bar spare,name=c,inner sep=0,outer sep=0] {} ;
+	\end{axis}
+	\path 
+		($(distmem.east)+(1em,4\baselineskip)$) \mylegendentry{name=legendsd}{bar spare,name=keyspare}{spare time}
+		++(0,-\baselineskip) \mylegendentry{name=legendwd}{bar write}{any write}
+		++(0,-\baselineskip) \mylegendentry{name=legenducd}{bar uncached read}{uncached read}
+		++(0,-\baselineskip) \mylegendentry{name=legendmd}{bar mutex read}{read for mutex}
+		++(0,-\baselineskip) \mylegendentry{name=legenddcd}{bar dcache read}{D-cache burst read}
+		++(0,-\baselineskip) \mylegendentry{name=legendicd}{bar icache read}{I-cache burst read}
+		++(0,-\baselineskip) node[inner sep=0pt,name=legendbars,anchor=north west,text ragged right,max text width=26ex] 
+			{Left bar is bakery (see also \vref{fig:hardware:memtraffic:bakery:time}), right bar is distributed lock};
+	\fillpat{keyspare}
+	\node[legend border,fit={(legendicd) (legenddcd) (legenducd) (legendwd) (legendsd) (legendbars)}] {};
+\end{tikzpicture}%

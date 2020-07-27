@@ -1,0 +1,6 @@
+% Post process table from OOo Calc
+% :%s/\t/ \& /g | %s/ & \\/ \\/ | %!sort
+\theapp{fluidanimate} & 2935247 & 285176 & 280665 & 4511 & 1110 & 25898.3		\NN
+\theapp{radiosity} & 1594306 & 627154 & 574620 & 52533 & 214764 & 8480.6		\NN
+\theapp{raytrace} & 33831 & 1681 & 1645 & 36 & 73 & 102.0						\NN
+\theapp{volrend} & 56380 & 33962 & 33886 & 76 & 8024 & 3892.9					\LL

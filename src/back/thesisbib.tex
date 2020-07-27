@@ -1,0 +1,43 @@
+\needspace{4em}
+\section*{This thesis}
+\index{bibtex@\BibTeX of this thesis}
+
+\def\monthbibtexname#1{%
+	\ifcase#1\relax%
+	\or jan\or feb\or mar\or apr%
+	\or may\or jun\or jul\or aug%
+	\or sep\or okt\or nov\or dec\fi%
+}
+
+\def\authorlastname{}
+\def\authorfirstnames{\ignorespaces}
+
+\def\getword#1 {%
+	\let\donext\getword%
+	\ifx\relax#1%
+		\let\donext\relax%
+	\else%
+		\expandafter\appto\expandafter\authorfirstnames\expandafter{\expandafter\space\authorlastname}%
+		\def\authorlastname{#1}%
+	\fi%
+	\donext%
+}
+\expandafter\getword\thesisauthorplain{} \relax{} %
+
+\noindent%
+\begin{lstcode}[lst={title={\BibTeX of this thesis},label=lst:bibtex,language={[common]TeX},numbers=none,xleftmargin=0pt}]
+@phdthesis{$\MakeTextLowercase{\authorlastname}\thesisyear$:thesis,
+	author={$\authorlastname, \authorfirstnames$},
+	title={$\thefullpdftitle$},
+	school={University of Twente},
+	address={PO Box 217, 7500 AE  Enschede, The Netherlands},
+	year={$\thesisyear$},
+	month=$\expandafter\monthbibtexname\expandafter{\thesismonth}$,
+	day={$\thesisday$},
+	number={CTIT Ph.D. Thesis Series No. $\thesisCTITnr$},
+	issn={$\thesisISSN$},
+	isbn={$\thesisISBN$},
+	doi={$\thesisDOI$}
+}
+\end{lstcode}
+

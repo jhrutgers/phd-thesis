@@ -1,0 +1,21 @@
+\figureversion{text,tabular}%
+\begin{tikzpicture}[remember picture, overlay, draw=niceblack,text=niceblack]
+	\node[anchor=center,inner sep=0,outer sep=0] at ($(current page.north east)+(\trimedge,\trimtop)+(-.5\foremargin,-\uppermargin-.5\foremargin)$) (p) %
+		{\ifabstractonly\else\includegraphics[page=\thesheetsequence,scale=.5]{src/template/grav.pdf}\fi};
+	\node[anchor=mid] (n) at (p.center) {\ifabstractonly\else\thepage\fi};
+	\ifx\nonumchap\undefined
+		\path let \p1=(n.base), \p2=(current page.north east) in
+			($(\x2,\y1)+(\trimedge-\foremargin-.5\textwidth,-1cm)$)
+			node[scale=5,font=\HUGE\bfseries,anchor=base,inner sep=0,outer sep=0] {%
+			\pdfliteral{7 Tr}%		set clip (comment this line to debug the background text)
+			\thechapter%
+			\pdfliteral{0 Tr}%		back to normal glyph drawing
+			\hspace{-1.6ex}%		move back to left side of chapter number
+			\tikz[baseline=.3em]{%	write background ascii-art (clipped)
+				\path[use as bounding box,clip] (0,0) rectangle (1.6ex,1em);
+				\node[wrap text,max text width=17ex,anchor=south west,font=\normalfont\tiny,scale=.1,text=black] %
+					{\sloppy\foreach \x in {1,...,\aachaptextrepeat} {\aachaptext\ }};
+			}%
+		};
+	\fi
+\end{tikzpicture}%

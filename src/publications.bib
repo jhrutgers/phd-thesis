@@ -1,0 +1,275 @@
+% This file was created with JabRef 2.7b.
+% Encoding: UTF-8
+
+@INPROCEEDINGS{wolkotte:shils,
+  author = {Wolkotte, P. T. and Rutgers, J. H. and H\"olzenspies, P. K. F. and
+	Westmijze, M. and Blumink, R. and Smit, G. J. M.},
+  title = {An Automated Design-flow for {FPGA}-based Sequential Simulation},
+  booktitle = {Proceedings of the \xth{19} Annual Workshop on Circuits, Systems
+	and Signal Processing (ProRISC), Veldhoven, The Netherlands},
+  year = {2008},
+  number = {2008/14935/STW},
+  pages = {126--132},
+  month = nov,
+  publisher = {STW},
+  abstract = {In this paper we describe the automated design flow that will transform
+	and map a given homogeneous or heterogeneous hardware design into
+	an FPGA that performs a cycle accurate simulation. The flow replaces
+	the required manually performed transformation and can be embedded
+	in existing standard synthesis flows. Compared to the earlier manually
+	translated designs, this automated flow resulted in a reduced number
+	of FPGA hardware resources and higher simulation frequencies. The
+	implementation of the complete design flow is work in progress.},
+  eprintid = {14637},
+  event_dates = {27-28 Nov 2008},
+  event_type = {Workshop},
+  howpublished = {http://eprints.eemcs.utwente.nl/14637/},
+  international = {No},
+  isbn_13 = {978-90-73461-56-7},
+  ispublished = {Published},
+  location = {Veldhoven, The Netherlands},
+  num_pages = {7},
+  owner = {rutgers},
+  pres_types = {Talk, Poster},
+  refereed = {No},
+  research_groups = {EWI-CAES: Computer Architecture for Embedded Systems},
+  research_programs = {CTIT-WiSe: Wireless and Sensor Systems},
+  research_projects = {CRISP: Cutting edge Reconfigurable ICs for Stream Processing},
+  timestamp = {2013.06.05},
+  url = {http://doc.utwente.nl/65230/}
+}
+
+@INPROCEEDINGS{rutgers:mcs,
+  author = {Rutgers, J. H. and Wolkotte, P. T. and H\"olzenspies, P. K. F. and
+	Kuper, J. and Smit, G. J. M.},
+  title = {An Approximate Maximum Common Subgraph Algorithm for Large Digital
+	Circuits},
+  booktitle = {Proceedings of the \xth{13} Euromicro Conference on Digital System
+	Design: Architectures, Methods and Tools (DSD 2010), Lille, France},
+  year = {2010},
+  pages = {699--705},
+  address = {USA},
+  month = sep,
+  publisher = {IEEE Computer Society},
+  abstract = {This paper presents an approximate Maximum Common Subgraph (MCS) algorithm,
+	specifically for directed, cyclic graphs representing digital circuits.
+	Because of the application domain, the graphs have nice properties:
+	they are very sparse; have many different labels; and most vertices
+	have only one predecessor. The algorithm iterates over all vertices
+	once and uses heuristics to find the MCS. It is linear in computational
+	complexity with respect to the size of the graph. Experiments show
+	that very large common subgraphs were found in graphs of up to 200,000
+	vertices within a few minutes, when a quarter or less of the graphs
+	differ. The variation in run-time and quality of the result is low.},
+  doi = {10.1109/DSD.2010.29},
+  eprintid = {18373},
+  event_dates = {01-03 Sep 2010},
+  event_type = {Conference},
+  howpublished = {http://eprints.eemcs.utwente.nl/18373/},
+  id_number = {10.1109/DSD.2010.29},
+  international = {Yes},
+  isbn_13 = {978-0-7695-4171-6},
+  ispublished = {Published},
+  location = {Lille, France},
+  num_pages = {7},
+  official_url = {http://dx.doi.org/10.1109/DSD.2010.29},
+  owner = {rutgers},
+  pres_types = {Talk},
+  refereed = {Yes},
+  research_groups = {EWI-CAES: Computer Architecture for Embedded Systems},
+  research_programs = {CTIT-WiSe: Wireless and Sensor Systems},
+  research_projects = {NEST: Netherlands Streaming Reconfigurable digital antenna processor},
+  timestamp = {2013.06.05}
+}
+
+@INPROCEEDINGS{rutgers:distlock,
+  author = {Rutgers, J. H. and Bekooij, M. J. G. and Smit, G. J. M.},
+  title = {An Efficient Asymmetric Distributed Lock for Embedded Multiprocessor
+	Systems},
+  booktitle = {Proceedings of the International Conference on Embedded Computer
+	Systems: Architectures, Modeling, and Simulation (IC-SAMOS 2012),
+	Samos, Greece},
+  year = {2012},
+  pages = {176--182},
+  address = {USA},
+  month = jul,
+  publisher = {IEEE Circuits \& Systems Society},
+  abstract = {Efficient synchronization is a key concern in an embedded many-core
+	system-on-chip (SoC). The use of atomic read-modify-write instructions
+	combined with cache coherency as synchronization primitive is not
+	always an option for shared-memory SoCs due to the lack of suitable
+	IP. Furthermore, there are doubts about the scalability of hardware
+	cache coherency protocols. Existing distributed locks for NUMA multiprocessor
+	systems do not rely on cache coherency and are more scalable, but
+	exchange many messages per lock.
+	
+	This paper introduces an asymmetric distributed lock algorithm for
+	shared-memory embedded multiprocessor systems without hardware cache
+	coherency. Messages are exchanged via a low-cost inter-processor
+	communication ring in combination with a small local memory per processor.
+	Typically, a mutex is used over and over again by the same process,
+	which is exploited by our algorithm. As a result, the number of messages
+	exchanged per lock is significantly reduced. Experiments with our
+	32-core system show that when having locks in SDRAM, 35% of the memory
+	traffic is lock related. In comparison, our solution eliminates all
+	of this traffic and reduces the execution time by up to 89%.},
+  doi = {10.1109/SAMOS.2012.6404172},
+  eprintid = {22073},
+  event_dates = {16-19 Jul 2012},
+  event_type = {Conference},
+  howpublished = {http://eprints.eemcs.utwente.nl/22073/},
+  id_number = {10.1109/SAMOS.2012.6404172},
+  international = {Yes},
+  isbn_13 = {978-1-4673-2296-6},
+  ispublished = {Published},
+  location = {Samos, Greece},
+  num_pages = {7},
+  official_url = {http://dx.doi.org/10.1109/SAMOS.2012.6404172},
+  owner = {rutgers},
+  pres_types = {Talk},
+  refereed = {Yes},
+  research_groups = {EWI-CAES: Computer Architecture for Embedded Systems},
+  research_programs = {CTIT-WiSe: Wireless and Sensor Systems},
+  research_projects = {NEST: Netherlands Streaming Reconfigurable digital antenna processor},
+  timestamp = {2013.06.05}
+}
+
+@INPROCEEDINGS{rutgers:noc,
+  author = {Rutgers, J. H. and Bekooij, M. J. G. and Smit, G. J. M.},
+  title = {Evaluation of a Connectionless {NoC} for a Real-Time Distributed
+	Shared Memory Many-Core System},
+  booktitle = {Proceedings of the \xth{15} Euromicro Conference on Digital System
+	Design (DSD 2012), {\c{C}}e{\c{s}}me, Izmir, Turkey},
+  year = {2012},
+  pages = {727--730},
+  address = {USA},
+  month = sep,
+  publisher = {IEEE Computer Society},
+  abstract = {Real-time embedded systems like smartphones tend to comprise an ever
+	increasing number of processing cores. For scalability and the need
+	for guaranteed performance, the use of a connection-oriented network-on-chip
+	(NoC) is advocated. Furthermore, a distributed shared memory architecture
+	is preferred as it simplifies software development for a multi-core
+	system.
+	
+	In this paper, experimental evidence is provided, showing that replacing
+	a connection-oriented NoC by a connectionless one in a distributed
+	shared memory system reduces the hardware costs and improves the
+	performance. We observed that our FPGA could only support an 8-core
+	system with a connection-oriented NoC. We exchanged the NoC with
+	our tree-shaped, connectionless network and a ring, allowing a 32-
+	core system in the same FPGA, mainly because of a reduced number
+	of physical connections. Although the analytical worst-case performance
+	slightly decreased, measurements show that the latency of latency-critical
+	memory reads was reduced by 52% on average.},
+  doi = {10.1109/DSD.2012.54},
+  eprintid = {22211},
+  event_dates = {5-8 Sep 2012},
+  event_type = {Conference},
+  howpublished = {http://eprints.eemcs.utwente.nl/22211/},
+  id_number = {10.1109/DSD.2012.54},
+  international = {Yes},
+  isbn_13 = {978-0-7695-4798-5},
+  ispublished = {Published},
+  location = {{\c{C}}e{\c{s}}me, Izmir, Turkey},
+  num_pages = {4},
+  official_url = {http://dx.doi.org/10.1109/DSD.2012.54},
+  owner = {rutgers},
+  pres_types = {Poster},
+  refereed = {Yes},
+  research_groups = {EWI-CAES: Computer Architecture for Embedded Systems},
+  research_programs = {CTIT-WiSe: Wireless and Sensor Systems},
+  research_projects = {NEST: Netherlands Streaming Reconfigurable digital antenna processor},
+  timestamp = {2013.06.05}
+}
+
+@ARTICLE{pande:snn,
+  author = {Pande, S. and Fearghal, M. and Smit, G. J. M. and Bruintjes, T. M.
+	and Rutgers, J. H. and Cawley, S. and Harkin, J. and McDaid, L.},
+  title = {Fixed latency on-chip interconnect for hardware spiking neural network
+	architectures},
+  journal = {Parallel Computing},
+  year = {2013},
+  month = apr,
+  abstract = {Information in a Spiking Neural Network (SNN) is encoded as the relative
+	timing between spikes. Distortion in spike timings can impact the
+	accuracy of SNN operation by modifying the precise firing time of
+	neurons within the SNN. Maintaining the integrity of spike timings
+	is crucial for reliable operation of SNN applications. A packet switched
+	Network on Chip (NoC) infrastructure offers scalable connectivity
+	for spike communication in hardware SNN architectures. However, shared
+	resources in NoC architectures can result in unwanted variation in
+	spike packet transfer latency. This packet latency jitter distorts
+	the timing information conveyed on the synaptic connections in the
+	SNN, resulting in unreliable application behaviour.
+	
+	This paper presents a SystemC simulation based analysis of the synaptic
+	information distortion in NoC based hardware SNNs. The paper proposes
+	a fixed spike transfer latency ring topology interconnect for spike
+	communication between neural tiles, using a novel timestamped spike
+	broadcast flow control scheme. The proposed architectural technique
+	is evaluated using spike rates employed in previously reported mesh
+	topology NoC based hardware SNN applications, which exhibited spike
+	latency jitter over NoC paths. Results indicate that the proposed
+	interconnect offers fixed spike transfer latency and eliminates the
+	associated information distortion.
+	
+	The paper presents the micro-architecture of the proposed ring router.
+	The FPGA validated ring interconnect architecture has been synthesised
+	using 65nm low-power CMOS technology. Silicon area comparisons for
+	various ring sizes are presented. Scalability of the proposed architecture
+	has been addressed by employing a hierarchical NoC architecture.},
+  address = {Amsterdam},
+  doi = {10.1016/j.parco.2013.04.010},
+  eprintid = {23312},
+  howpublished = {http://eprints.eemcs.utwente.nl/23312/},
+  id_number = {10.1016/j.parco.2013.04.010},
+  international = {Yes},
+  ispublished = {Published},
+  issn = {0167-8191},
+  num_pages = {23},
+  official_url = {http://dx.doi.org/10.1016/j.parco.2013.04.010},
+  owner = {rutgers},
+  publisher = {Elsevier},
+  refereed = {Yes},
+  research_groups = {EWI-CAES: Computer Architecture for Embedded Systems},
+  research_programs = {CTIT-WiSe: Wireless and Sensor Systems},
+  research_projects = {SOWICI: Smart Optical Wireless In-home Comminication Infrastructure},
+  timestamp = {2013.06.05}
+}
+
+@INPROCEEDINGS{rutgers:pmc,
+  author = {Rutgers, J. H. and Bekooij, M. J. G. and Smit, G. J. M.},
+  title = {{Portable Memory Consistency} for Software Managed Distributed Memory
+	in Many-Core {SoC}},
+  booktitle = {Proceedings of the \xth{20} Reconfigurable Architectures Workshop
+	(RAW 2013), Boston, MA, USA},
+  year = {2013},
+  pages = {212--221},
+  address = {USA},
+  month = may,
+  publisher = {IEEE Computer Society},
+  note = {ISBN 978-0-7695-4979-8},
+  doi = {10.1109/IPDPSW.2013.14},
+  owner = {rutgers},
+  timestamp = {2013.06.05}
+}
+
+@INPROCEEDINGS{rutgers:lambda,
+  author = {Rutgers, J. H. and Bekooij, M. J. G. and Smit, G. J. M.},
+  title = {Programming a Multicore Architecture without Coherency and Atomic
+	Operations},
+  booktitle = {Proceedings of the International Workshop on Programming Models and
+	Applications for Multicores and Manycores (PMAM 2014), Orlando, FL,
+	USA},
+  year = {2014},
+  pages = {29:29--29:38},
+  month = feb,
+  publisher = {ACM},
+  address = {USA},
+  note = {ISBN 978-1-4503-2655-1},
+  doi = {10.1145/2560683.2560697},
+  owner = {rutgers},
+  timestamp = {2013.11.01}
+}
+

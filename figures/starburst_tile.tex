@@ -1,0 +1,57 @@
+\inputonce{figures/arch_style}%
+\begin{tikzpicture}[component/.append style={minimum height=2.5em}]
+
+%% MicroBlaze
+\node[plain label,text=white,minimum width=8.5\portablefigunit,minimum height=3.5\portablefigunit,no icon] (mb core) 
+	{\parbox{7\portablefigunit}{\Centering\MicroBlaze\\{\portablefigfontB\raisebox{.5ex}[0pt][0pt]{mult, barrel, \noac{FPU}}}}};
+\node[core,minimum size=0,text width=6ex,anchor=north west,outer sep=0,no icon] (icache) at (mb core.south west)
+	{\SI{16}{\Kilo\byte} I\$};
+\node[core,minimum size=0,text width=6ex,anchor=north west,outer ysep=0,outer xsep=\pgflinewidth,no icon] (dcache) at (icache.north east)
+	{\SI{8}{\Kilo\byte} D\$};
+\begin{pgfonlayer}{background}
+	\node[core,inner sep=0,fit={(mb core) (icache) (dcache)}] (mb) {};
+\end{pgfonlayer}
+
+%% LMB
+\node[memory,text width=5ex,anchor=north east] (spm) at ($(mb.north west)+(-2\portablefigunit,0)$) {\SI{4}{\Kilo\byte} \acs{SPM}};
+\node[memory,text width=5ex,anchor=south east] (ram) at ($(mb.south west)+(-2\portablefigunit,0)$) {\SI{4}{\Kilo\byte} \acs{RAM}};
+\draw[bus] ($(mb.south west)!.5!(ram.south east)$) -- ($(mb.north west)!.5!(spm.north east)$);
+\draw[connection] (mb.west) -- ++(-\portablefigunit,0);
+\draw[connection] (spm.east) ++(\portablefigunit,0) -- (spm.east);
+\draw[connection] (ram.east) ++(\portablefigunit,0) -- (ram.east);
+\node[bus label,anchor=south] (lmb label) at ($(mb.north west)!.5!(spm.north east)$) {\acs{LMB}};
+
+%% timer
+\node[component,anchor=south west,text width=9ex] (timer) at ($(mb.south east)+(\portablefigunit,0)$) {interrupt timer};
+\draw[connection] (timer.west) -- ++(-\portablefigunit,0);
+
+%% stats
+\node[component,anchor=north west,text width=10ex] (stats) at ($(mb.north east)+(3\portablefigunit,0)$) {statistics counters};
+\draw[connection] let \p1=(stats.west), \p2=(mb.north east) in
+	(\x2,\y1) node[bus label,anchor=south west] {trace} -- (\p1);
+
+%% PLB
+\path 
+	let \p1=($(ram.south west)+(0,-\portablefigunit)$), \p2=(stats.south east) in
+	($(\p1)+(-2\portablefigunit,0)$) coordinate (plb west)
+	(\x2,\y1) coordinate (plb east);
+\draw[bus] (plb west) -- (plb east);
+\node[bus label,anchor=north west] (plb label) at (plb west) {tile-local \acs{PLB}};
+\draw[connection] (icache.south) -- +(0,-\portablefigunit);
+\draw[connection] (dcache.south) -- +(0,-\portablefigunit);
+\draw[connection] ($(dcache.south east)!.5!(mb.south east)$) -- +(0,-\portablefigunit);
+\draw[connection] (timer.south) ++(0,-\portablefigunit) -- (timer.south);
+\draw[connection] let \p1=(timer.east), \p2=(stats.south east), \p3=(plb east) in ($(\x1,\y3)!.5!(\x2,\y3)$) -- ($(\x1,\y2)!.5!(\p2)$);
+
+%% tile
+\begin{pgfonlayer}{deepground}
+	\node[cluster,inner sep=\portablefigunit,fit={(spm) (stats) (plb east) (plb label) (lmb label)}] (tile) {};
+\end{pgfonlayer}
+\draw[connection] let \p1=($(plb west)+(\portablefigunit,0)$), \p2=(tile.north) in
+	(\p1) -- ($(\x1,\y2)+(0,\portablefigunit)$)
+	node[bus label,anchor=south west,inner xsep=0] {write-only interconnect to other tiles' \acsp{SPM}};
+\draw[connection] let \p1=(spm.north), \p2=(tile.north) in
+	($(\x1,\y2)+(0,\portablefigunit)$) -- (\p1);
+\draw[connection] let \p1=($(plb west)!.5!(plb east)$), \p2=($(tile.south)+(0,-\portablefigunit)$) in
+	(\p1) -- (\x1,\y2) node[bus label,anchor=north] {read/write access to shared memory and peripherals};
+\end{tikzpicture}%

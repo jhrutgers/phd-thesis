@@ -1,0 +1,40 @@
+\begin{tikzpicture}[
+	subcap/.style={},
+]
+\input{figures/conc_lambda_style}
+\tikzset{
+	term/.style={mem object,alive,circle,text width=2em,inner sep=0pt},
+	fun/.style={outer sep=0,inner sep=.4ex},
+}
+
+\newlength{\termdist}
+\setlength{\termdist}{4.35em}
+
+\node[subcap] (r1)				at (0,0)						{\strut (a) part of outer \thefunc{inc}};
+\node[term] (a)					at ($(r1.90)+(90:.8\termdist)$)	{\strut app};
+\node[term] (add)				at ($(a)+(135:\termdist)$)		{\strut fun};					\draw[pointer] (a) to (add);
+\node[fun] (addf)				at ($(add)+(90:\termdist)$)		{\strut $+$};					\draw[pointer] (add) to (addf);
+\node[term,global] (a2)			at ($(a)+(45:\termdist)$)		{\strut app};					\draw[pointer] (a) to (a2);
+\node[term] (inc)				at ($(a2)+(110.7:\termdist)$)	{\strut fun};					\draw[pointer] (a2) to (inc);
+\node[fun] (incf)				at ($(inc)+(90:\termdist)$)		{\strut\lstinline|inc_func|};	\draw[pointer] (inc) to (incf);
+\node[term] (c5)				at ($(a2)+(69.3:\termdist)$)	{5};							\draw[pointer] (a2) to (c5);
+
+\node[subcap] (r2)				at ($(r1)+(0:3.9\termdist)$)	{\strut (b) after double reduction of $\thefunc{inc}\;5$};
+\node[term] (a)					at ($(r2.160)+(90:.8\termdist)$){\strut app};
+\node[term] (add)				at ($(a)+(135:\termdist)$)		{\strut fun};					\draw[pointer] (a) to (add);
+\node[fun] (addf)				at ($(add)+(90:\termdist)$)		{\strut $+$};					\draw[pointer] (add) to (addf);
+\node[term,global] (a2)			at ($(a)+(45:\termdist)$)		{\strut app};					\draw[pointer] (a) to (a2);
+\node[term,dead] (inc)			at ($(a2)+(110.7:\termdist)$)	{\strut fun};					\draw[pointer] (a2) to (inc);
+\node[fun] (incf)				at ($(inc)+(90:\termdist)$)		{\strut\lstinline|inc_func|};	\draw[pointer] (inc) to (incf);
+\node[term,dead] (c5)			at ($(a2)+(69.3:\termdist)$)	{5};							\draw[pointer] (a2) to (c5);
+\node[term,global] (c6)			at ($(a2)+(27.9:\termdist)$)	{6};							\draw[indirect] (a2) to (c6);
+\node[term,global,dead] (c6b)	at ($(a2)+(-13.5:\termdist)$)	{6};							\draw[indirect] (a2) to (c6b);
+
+\node[outer sep=1pt,inner sep=0] (overwrite) at ($(a2)!.45!(c6b)$) {\tikz[x=.7ex,y=.7ex,outer sep=0]{\draw[red,thick] (-1,1) -- (1,-1) (-1,-1) -- (1,1);}};
+\node[anchor=220] at (c5.north) {superseded};
+\node[anchor=mid west] at (c6.east) {reduction result};
+\node[anchor=west,text width=15ex] at (c6b.east) {discarded result; to be \acs{GC}'ed};
+\node[anchor=north,text width=20ex,text centered] (indirlbl) at ($(c6b.south)+(-1ex,-2ex)$) {overwritten indirection pointer};
+\draw[->] (indirlbl.150) to (overwrite);
+
+\end{tikzpicture}%

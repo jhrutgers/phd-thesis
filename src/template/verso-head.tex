@@ -1,0 +1,6 @@
+\begin{tikzpicture}[remember picture, overlay, draw=nicegray, text=niceblack]
+	\node[anchor=center,inner sep=0,outer sep=0] at ($(current page.north west)+(\trimedge,\trimtop)+(.5\foremargin,-\uppermargin-.5\foremargin)$) (p) %
+		{\includegraphics[page=\thesheetsequence,scale=.5]{src/template/grav.pdf}};
+	\node[anchor=mid] at (p.center) {\thepage};
+	\node[anchor=mid west,rotate=-90] at ($(p.center)+(0,-1.5cm)$) {\strut\scshape\leftmark};
+\end{tikzpicture}%

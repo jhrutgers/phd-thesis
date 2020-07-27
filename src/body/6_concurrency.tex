@@ -1,0 +1,1152 @@
+\inputonce{figures/arch_style}
+
+\begin{chapterfig}[\Cref{c:concurrency}]
+\platformlayer[padded]						(app)	{\NoFib};
+\platformlayerlabel[]						<app>	{application};
+\platformlayer[model,padded]				(pm)	{\twopartlabel{}{functional}};
+\platformlayerlabel[]						<pm>	{programming model};
+\platformlayer[model,padded]				(moc)	{\twopartlabel{}{\lcalc}};
+\platformlayerlabel[]						<moc>	{model of computation};
+\platformlayerglue[padded]					()		{\textbf{\ourfp}};
+\platformlayer[model,padded]				(cm)	{worker threads};
+\platformlayerlabel[]						<cm>	{concurrency model};
+\platformlayerglue[padded]					()		{\Helix\ / Linux};
+\platformlayer[model,padded]				(mm)	{\acs{PMC}, \textbf{non-deterministic}};
+\platformlayerlabel[]						<mm>	{memory model};
+\platformlayer[padded,minimum height=3.5em]	(hw)	{\textbf{atomic-free}};
+\platformlayerlabel[]						<hw>	{hardware};
+\rightflappadded[]							<pm-moc>;
+\crosslayerright[] <moc.north east->		()		{\Starburst\ / x86};
+\crosslayerleft[] <app.north west-mm.west>	() 		{software layers};
+\crosslayerleft[] <mm.west->				() 		{hardware};
+\end{chapterfig}
+
+\setaachaptext[50]{concurrency-hiding chapter by using \lcalc}
+\chapter{Implicit Software Concurrency}
+\label{c:concurrency}
+\nofootnote{Large parts of this chapter have been published in \selfcite{rutgers:lambda}.}
+
+\begin{abstract}%
+Previous chapters assumed programming a many-core system using an imperative language.
+Then, atomicity is preferred to reason about the program state, by means of atomic \ac{RMW} operations, a strong memory model, and hardware cache coherency.
+This chapter shows the impact on the platform when a \lcalc-based (functional) language is used instead.
+Ordering requirements of memory operations are more relaxed and synchronization is simplified, because \lcalc does not have a notion of state or memory, and therefore imposes fewer ordering requirements on the platform.
+We implemented a functional language for architectures with a weak memory model, without the need of hardware cache coherency, any atomic \ac{RMW} operation, or mutex---in other words, the execution is \emph{atomic-free}.
+Moreover, both the memory model and concurrency model can be hidden from the programmer, as the programming paradigm implicitly allows concurrency.
+\end{abstract}
+
+The relation between a platform and its programming model is an interesting one.
+Where \cref{c:progmodel} presents the coherence of models and hardware, \cref{c:memory} presents the influence of hardware on the programming model.
+Trends show that the memory model becomes weaker, so programming has to become more disciplined.
+To overcome the programming difficulties, the previous chapter introduced an abstraction, such that the memory model of the hardware could be removed from the programming model.
+
+Based on the hardware trends above and the influence of these trends on the programming model, one might conclude that the hardware drives modifications of the programming model in general.
+For example, architectural choices for many-core systems clearly lead to changes in programming models.
+Let us consider the effects of the interconnect more closely.
+Where two cores can share one bus, larger systems often have complex interconnection structures like a \acl{NoC}, which increase the latency of the communication between cores.
+This complicates operations that require \ix{atomic} global communication, where the result of such an operation must become visible to all cores, without any (observable) intermediate state during the state transition.
+A single write operation in hardware with a strong memory model is one example of such atomic global communication.
+Additionally, a hardware cache coherency protocol and an atomic \acix{RMW} operation, like a compare-and-swap, are also complex and time-consuming to realize in hardware when global communication takes multiple clock cycles to complete.
+Alternatives that avoid atomics, and are therefore easier to realize in hardware, are software cache coherency, or not to use cache coherency at all, and to drop atomic \ac{RMW} operations.
+However, these alternatives complicate programming.
+When state changes are not instant anymore, and thus need some time to complete, the \ix{transient state} is unpredictable, but still observable in a multicore environment.
+The hardware and common programming models often expose these issues to the programmer, which makes reasoning about correct program behavior very hard~\cite{adve:rethinking}.
+Hence, the choice of the (interconnect) hardware affects programming.
+
+However, this only partly addresses the hardware--software relation.
+The problems mentioned above are all related to memory consistency and synchronization, or \ix{concurrency} in general.
+A widely used concurrent programming paradigm to harness the power of a parallel machine is \ix{threading} in combination with \ix{shared memory}.
+However, \citet{lee:problem_with_threads} argues that threads (in combination with an imperative language like C) induce \ix{non-determinism}, which all should be pruned away by the programmer.
+Having a strong memory model and efficient synchronization makes this task a bit easier, but also makes the hardware more complex and less scalable, which leads to the problems above.
+Hence, one might conclude that the choice of a \keyinsight{programming} paradigm drives the design choices regarding the \emph{hardware}.
+This is in contrast to what one might have concluded above.
+Where previous chapters modified hardware abstractions and analyzed the effects on software, this chapter modifies the programming abstraction and analyzes the effects on hardware.
+
+%Therefore, changing the programming paradigm could greatly influence the architecture of a multicore system.
+%To make scaling to many-core systems feasible, we have to reduce the usage of atomics, but this should not complicate programming.
+%We argue that the synergy of the programming model and the platform should be exploited, and we want to demonstrate that the atomic communication issues mentioned above can be solved at a higher level by changing the programming paradigm.
+
+In all previous chapters, we assumed that the platform is programmed using C or C++.
+In this chapter, we show that the requirements for a multicore architecture relax, when assuming that it is programmed using a \ix[functional programming]{functional language}.
+More specifically:
+\begin{enumerate}
+\item We show that concurrent execution can be achieved without locks and atomic \ac{RMW} operations, even on hardware with a weak memory model, based on properties of the programming paradigm.
+	Hence, the execution is \emph{\ix{atomic-free}}; it does not rely on any sequence of operations that should be observed by or communicated to other processes atomically, in either hardware or software.
+	This opens the possibility to reduce hardware complexity, and therefore makes the hardware more scalable.
+	We acknowledge that avoiding \emph{all} atomics is a very strong requirement, and that practical systems might benefit from allowing some of them anyway.
+	However, we show that it is possible to do so, and still provide a proper programming interface.
+\item We show that carefully introducing \ix[data race]{data races} in the \acl{RTS} does \emph{not} harm the deterministic behavior of the application, which is in contrast to data races in both C11 and C++11 standards.
+\item We derive rules for a weak memory model, and show the relation to \ac{PMC} and its software cache coherency back-end specifically.
+\item Experiments on \Starburst and x86 show the feasibility of the approach. %a linear speedup when scaling to more cores.
+\end{enumerate}
+This can be achieved, because of the nature of the \lcalc*, which is the mathematical basis of the functional programming paradigm.
+Its distinctive properties include that it does not have the notion of state or memory, which eases dealing with weak memory models.
+Moreover, functional programs naturally allow concurrency, because all dependencies between calculations are explicitly defined.
+Furthermore, since a functional language is single-assignment, calculating the same expression twice gives the same result, which allows simplification of synchronizing concurrent calculations.
+%This makes using a functional language attractive on a many-core system.
+
+We discuss the basic idea of our approach next, followed by related work, a discussion of our functional language that allows atomic-free execution, the requirements on the memory model, and experiments.
+
+\section{Basic idea}
+
+The basic idea of this approach is exemplified as follows.
+Consider the following pseudo-code:
+\begin{lstlisting}[frame=,numbers=none,numbersep=0pt,xleftmargin=0pt]
+x = foo();
+y = bar() + x;
+\end{lstlisting}
+If this code snippet was C, the assignments of \lsticode|x| and \lsticode|y| should be done in the specified order, otherwise the initial value of \lsticode|x| is used for the addition instead.
+When both lines are calculated by different threads, the computation of \lsticode|y| by one thread should be stalled until it is guaranteed that the other thread finished computing \lsticode|x|.
+
+In a functional language, variables are single-assignment, so `\lsticode|=|' means \emph{definition} instead.
+One can imagine that the thread calculating \lsticode|y| checks whether \lsticode|x| has been computed yet, and if not, it waits for the completion of \lsticode|x| or computes \lsticode|x| by itself.
+Hence, a data race exists in the last case in the calculation and assignment of \lsticode|x|.
+However, even if \lsticode|x| is evaluated twice because of this data race, the result is the same.
+
+Allowing this data race can be used for optimizations, without influencing the outcome of the program.
+Threads might decide to compute variables repeatedly to prevent fetching it from shared memory and consuming precious memory bandwidth. %in order to save energy---communication is becoming the dominant factor in power usage with respect to computation.
+Additionally, distributing work among worker threads without proper \ix{synchronization} might also (safely) result in duplicates.
+Moreover, communication of results to other cores can be postponed when that seems to be beneficial for cache coherency protocols, for example.
+
+However, there is no free lunch.
+In contrast to C, it is not obvious to decide whether a variable is still in use or not, as the source code does not define when a variable is not used anymore.
+Keeping administration at run time is possible, but data races might complicate this analysis.
+%Therefore, a garbage collector has to analyze regularly which variables can be cleaned up.
+%Besides introducing overhead, data races should be limited, such that this analysis can be done.
+So, there is a balance in allowing races and arbitrary ordering of memory operations during evaluation for higher performance on one hand, and preventing races and giving guarantees about the memory state for garbage analysis on the other.
+
+%The rest of the article works out this basic idea and is structured as follows.
+%Related work is discussed in \cref{s:concurrency:related}.
+%Next, the impact of the functional programming paradigm down to the hardware platform is discussed in a top-down fashion.
+%To evaluate the principles of \lcalc in a many-core environment, we implemented an untyped functional language, which closely follows the fundamentals of \lcalc.
+%\Cref{s:concurrency:fp} elaborates on the details.
+%As suggested by the example above, orderings of reads and writes can be less strict compared to what is required for C.
+%\Cref{s:concurrency:memory} discusses the impact of this on the underlying memory model and presents a simple though efficient software cache coherency protocol as a proof-of-concept.
+%In \cref{s:concurrency:experiments}, we present the results of running parallel applications of the \NoFib Benchmark Suite on a 24-core Intel machine and a non-cache-coherent 32-core MicroBlaze system on \ac{FPGA}.
+%\Cref{s:concurrency:conclusion} concludes the article.
+
+
+\section{Related work}
+\label{s:concurrency:related}
+
+% goal: create contrast
+% assumption:	many-core
+% problem:		shared-memory many-core with threads in C
+% my solution:	shared-memory many-core with FP
+
+% focus of closely related solutions:
+% - How do existing FP languages solve the scaling issue?
+% - How do other non-FP languages solve the scaling issue?
+% - Which other FP-optimized architectures are there (and what are their design choices)?
+% - Do other papers have a similar conclusion?
+
+Many functional languages exist, and they handle concurrency (and the related problems) differently.
+Clo\textit{j}ure~\cite{clojure} runs in the Java~\noac{VM} and assumes worker threads on top of a shared-memory machine.
+\noac{SAC} is based on a fork--join approach~\cite{grelck:sac}.
+Haskell supports different flavors of parallelism, based on \ac{GHC}: annotations and implicit concurrency~\cite{marlow:multicore_haskell}, explicit threads and channels~\cite{jones:conc_haskell}, and data parallelism~\cite{chakravarty:dp_haskell}.
+All implementations assume that the application is executed on an \acs{SMP} machine, with a \ac{POSIX}-like \ac{OS}, which implies having a strong memory model and threads.
+Ports of Haskell to other architectures include House~\cite{house} and \ac{GHC}'s port to \noac{ARM}, but they do not support multiple cores.
+We focus on the fundamental requirements of executing a parallel functional program, instead of assuming a common architecture.
+To the best of our knowledge, no work focuses on the direct relation between these languages and an underlying hardware architecture with a weak memory model, for example.
+
+Other parallel functional languages are based on message passing, like Erlang~\cite{armstrong:erlang}, Eden~\cite{loogen:eden} and Multi-MLton~\cite{sivaramakrishnan:parasitic_threads}.
+These languages can be ported to many architectures, because the message-passing abstraction hides issues related to memory consistency, and the model fits nicely to networks of computers.
+The same holds for stream processing applications that are implemented using message passing.
+However, sending and receiving messages has overhead by (unnecessary) data duplication, and it enforces a specific form of synchronization.
+As shared memory is more generic~\cite{culler:comp_arch}, and we focus on concurrency within a single \acl{SoC}, we do not consider message passing.
+
+In a different direction, the functional programming paradigm can also influence processor design instead of the system architecture.
+P\noac{ilGRIM}~\cite{boeijink:pilgrim} is an example of a specialized processor for lazy languages.
+The authors propose a multicore system as future work.
+However, it likely encounters the same memory consistency issues as any other multicore system, as the memory layout of expressions during execution is similar to the one discussed in \cref{s:concurrency:memlayout}.
+
+Although not specifically for functional languages, \citet{bhattacharjee:par_libs} measured the overhead of synchronization primitives of the parallelization libraries \noac{OpenMP} and Intel's \noac{TBB}.
+Even though the authors propose optimizations to improve the measured synchronization overhead of respectively \SI{47}{\percent} and \SI{80}{\percent} of the benchmark runtime, they conclude that the overhead will remain high at higher core counts.
+In contrast, we eliminate the need for such synchronization primitives, by choosing a different programming paradigm than the one of C/C++.
+
+Avoiding locks and atomic instructions has also been proposed by \citet{tithi:avoid_lock} for breadth-first search algorithms.
+These operations are recognized as costly, and the experiments with their proposed solution outperform state-of-the-art algorithms.
+\citet{nasre:atomic_free_gpu} also conclude that \ac{RMW} operations are costly and discuss transformations of graph algorithms to eliminate them, specifically targeting \acp{GPU}.
+These techniques make modifications to the algorithm, where we avoid atomic operations in general at the level of the programming paradigm.
+Optimizing the algorithm itself is beneficial, and it is an orthogonal technique to the modifications to the platform.
+
+On larger scale systems like cluster computers, MapReduce~\cite{dean:map_reduce} is a popular approach to program for concurrency.
+In this model, a function is concurrently applied to every element of a large dataset (\emph{map}), and the individual results are combined into a smaller dataset, like the sum of the inputs (\emph{reduce}).
+Because both phases do not modify the dataset, they can be considered side-effect free, which in turn can tolerate processing node failures.
+Work that does not complete in time can easily be reissued to another node in that case.
+Although MapReduce assumes `embarrassingly' parallel applications and large datasets on disks, the benefits also apply to functional languages at a smaller scale, like a single multicore system.
+However, functional languages are more generic, as they do not assume such a specific form of parallelism in the application.
+
+
+\section{Shift in paradigm: \lcalc and its implementation}
+
+\label{s:concurrency:fp}
+To understand the execution and memory related issues of programs written in a functional language, we (informally) explain the fundamentals of such a language.
+Afterwards, the implementation of our functional language is discussed, which closely follows these fundamentals.
+
+\subsection{Background on \lcalc}
+
+\label{s:concurrency:lambda}
+
+\ix[functional programming]{Functional languages} are based on their counterpart in mathematical logic, \lcalc*.
+This formal system defines expressions or \emph{\lterms*} as
+\begin{equation*}
+M ::= c \mvert x \mvert \lexpr.M M; \mvert \lexpr x.M;
+\end{equation*}
+where $c$ can be any constant or primitive function, $x$ is a variable that binds a name to another \lterm, $\lexpr.M M;$ is an application of the second \lterm to the first one, and $\lexpr x.M;$ is a function that takes one argument and binds it to all occurrences of $x$ in $M$.
+Prefix notation is used for function application.
+For example, $(\lexpr x.({\lexpr.({\lexpr.+ 2;}) x;});)$, or just written $\lexpr x.+ 2 x;$, is a function that takes one argument and adds $2$ to it.
+(Although the $+$ operator does not exist in \lcalc, assume that its behavior is defined.)
+
+In this simple example, $+$ is (assumed to be) a function that takes two arguments.
+If only one argument is applied to it, like $(\lexpr.+ 2;)$, the result is still a function, but now requires one argument---supplying fewer arguments than the function requires is \emph{partial application}.
+Functions can also be used as arguments.
+Functions that can take and/or return functions are \emph{higher-order functions}.
+An example is function composition, $f\circ g$, which is defined as $C=\lexpr f g x.f ({\lexpr.g x;});$.
+When both $f$ and $g$ are applied to $C$, the result is a function that still requires one argument.
+
+Next, the only rule of computation is called \emph{\ix[*beta-reduction@\fxbeta-reduction]{\fxbeta-reduction}}, which substitutes a formal argument by an actual one.
+So, $\lexpr.({\lexpr x.+ x 2;}) 3;$ is reduced to $\lexpr.+ 3 2;$, which then can be computed as $5$.
+
+The order in which expressions should be reduced is not defined.
+For example, the expression $\lexpr.({\lexpr x.f x;}) ({\lexpr.({\lexpr y.g y;}) 7;});$ can be reduced to both $\lexpr.({\lexpr x.f x;}) ({\lexpr.g 7;});$ and $\lexpr.f ({\lexpr.({\lexpr y.g y;}) 7;});$ in the first reduction step.
+However, based on the Church-Rosser Theorem~\cite{church:conversion}, the fully reduced result is always the same---in this case $\lexpr.f ({\lexpr.g 7;});$.
+Evaluating a function is \emph{side-effect free}; it only computes a result, and does not change the system in any other way.
+Therefore, reducing a term can also be postponed until its value is required, which is exactly what a \emph{lazy} functional language does.
+
+A more program-like example is the following definition of the volume of a cylinder with radius 2 and length 5:
+\begin{align*}
+\thefunc{main}		& = \lexpr  .\thefunc{cylinder} 2 5;											\\
+\thefunc{cylinder}	& = \lexpr r.{\times} ({\lexpr.{\times} {\pi} ({\lexpr.\thefunc{sqr} r;});});	\\
+\thefunc{sqr}		& = \lexpr x.{\times} x x;
+\end{align*}
+When we repeatedly reduce \thefunc{main}, the result is computed:
+\newcommand{\lcstep}[1]{& #1 \\}
+\newcommand{\lcred}[1]{\lcstep{\rightarrow_{#1}}}
+\newcommand{\betared}{\lcred{\upbeta}}
+\newcommand{\lcsubst}{\lcred{\text{substitute}}}
+\begin{align*}
+& \thefunc{main}																						& \lcsubst
+& \lexpr.\thefunc{cylinder} 2 5;																		& \lcsubst
+& \lexpr.({\lexpr r.{\times} ({\lexpr.{\times} {\pi} ({\lexpr.\thefunc{sqr} r;});});}) 2 5;				& \betared
+& \lexpr.({\lexpr.{\times} ({\lexpr.{\times} {\pi} ({\lexpr.\thefunc{sqr} 2;});});}) 5;					& \lcsubst
+& \lexpr.({\lexpr.{\times} ({\lexpr.{\times} {\pi} ({\lexpr.({\lexpr x.{\times} x x;}) 2;});});}) 5;	& \betared
+& \lexpr.({\lexpr.{\times} ({\lexpr.{\times} {\pi} ({\lexpr.{\times} 2 2;});});}) 5;					& \lcred{}
+& \lexpr.({\lexpr.{\times} ({\lexpr.{\times} {\pi} 4;});}) 5;											& \lcred{}
+%& (\times\;12.57\ldots)\;5										& \lcstep{=}
+%& \times\;12.57\ldots\;5										& \lcred{}
+& 62.83\ldots
+\end{align*}
+
+We implemented a simple functional language that closely follows the definition of \lcalc and the \fxbeta-reduction rule, which is discussed next.
+
+
+\subsection{Our simple functional language: \Ourfp}
+
+\label{s:concurrency:ourlang}
+
+%To experiment with a concurrently executing functional program, we implemented an untyped functional language\footnote{
+Based on the definition of \lcalc, it does not fundamentally require hardware features such as a strong memory model, and fully deterministic execution.
+As a proof-of-concept to show that it is possible to realize an atomic-free execution of a concurrent program, we implemented an untyped functional language\footnote{%
+	The implementation is available under the \noac{GPLv3} license at \\
+	\url{https://sites.google.com/site/jochemrutgers/lambdacpp}.}.
+%	\url{http://wwwhome.ewi.utwente.nl/~rutgers/lambda-0.0.1.tgz}.}.
+In fact, the language is just C++, where \lterms are represented by functors---classes that overload the \lsticode|()|-operator, such that the syntax resembles \lcalc somewhat and functions can be used as function arguments.
+We will refer to this language and its implementation as \emph{\ourfp*}.
+
+We will discuss the aspects of the implementation where usually atomics are involved.
+Notably, the focus is on data races during \fxbeta-reductions, and the distribution of work via a work queue.
+
+\subsubsection{General setup}
+
+\label{s:concurrency:double_inc}
+To explain the actual execution of a functional language, let us introduce a simpler example, of which every step in the computation will be discussed.
+This program increments 5 two times:
+\begin{align*}
+\thefunc{main}	& = \lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});	\\	% & & \text{, where $a=\thefunc{inc}\;5$} \\
+\thefunc{inc}	& = \lexpr x.+ x 1;											% & &
+\end{align*}
+This shows several statically allocated functions and objects, namely \thefunc{main}, \thefunc{inc}, $+$, $5$, and $1$.
+The reduction steps until the result is a constant are as follows.
+In these steps, the argument substitution is done immediately when a function is replaced by its definition.
+\begin{align*}
+1:\quad & \thefunc{main}												& \lcred{}
+2:\quad & \lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});				& \lcred{}
+3:\quad & \lexpr.+ ({\lexpr.\thefunc{inc} 5;}) 1;						& \lcred{}
+4:\quad & \lexpr.+ ({\lexpr.+ 5 1;}) 1;									& \lcred{}
+5:\quad & \lexpr.+ 6 1;													& \lcred{}
+6:\quad & 7																&
+\end{align*}
+
+\Vref{fig:concurrency:evaluation} shows for every step above, how it is executed on a computer.
+In this system, the static objects are constant, stored in memory, and always accessible.
+The stack is the same stack as used for executing C programs; it holds all local variables, function return addresses, \etc.
+However, only the relevant pointers to terms are depicted in the figure.
+The stack is always initialized to contain a pointer to \thefunc{main}.
+The heap is used to allocate \lterms and constants.
+In the figure, the heap and stack grow upwards.
+
+\begin{figure}%
+\inputfig{figures/conc_lambda}%
+\caption{Example of evaluation of \ourfp}%
+\label{fig:concurrency:evaluation}%
+\end{figure}
+
+Step~1 starts with an empty heap and a single pointer on the stack, which points to \thefunc{main}.
+The system repeatedly applies the reduction rule on the top-most pointer on the stack.
+After the first reduction step, which substitutes \thefunc{main}, the state of the system is also depicted in the figure.
+The expression $\lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});$ is split into two applications.
+Every application consists of a pointer to one function and a pointer to one argument.
+Step~2 in the figure shows that the heap contains these two \lterms: one application that points to \thefunc{inc} and $5$, and another application that points to \thefunc{inc} and the result of the first application.
+The arrows indicate the objects on which the heap objects depend.
+The `root' element on the stack now points to the result of the reduction, which is the outer application of \thefunc{inc}.
+Since this result is not a constant, the process is repeated.
+
+In step~3, the outer \thefunc{inc} function is reduced to $\lexpr.+ ({\lexpr.\thefunc{inc} 5;}) 1;$.
+In this case, the function $+$ requires two arguments, namely $\lexpr.\thefunc{inc} 5;$ and $1$.
+Since an application can only apply one argument to a function, \emph{\ix{currying}} is used.
+Currying will create a chain of applications, which all apply one argument to the previous expression.
+Therefore, the first application applies the existing expression $\lexpr.\thefunc{inc} 5;$ to the function $+$, which results in a partially applied function that still requires one argument.
+Then, the second application applies $1$ to this partial function application.
+Again, the root on the stack now points to the reduction result.
+Additionally, the figure indicates the relation between a \lterm and its reduction result by a dashed arrow.
+This means that every term that points to $\lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});$, should follow this indirection.
+Moreover, the application $\lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});$ is now unreachable by following pointers starting from the stack, so this term is \emph{dead}.
+In a later stage, its memory will be freed.
+
+Next, $\lexpr.+ ({\lexpr.\thefunc{inc} 5;}) 1;$ should be reduced.
+Assume that it is known that $+$ can only add constants.
+So, both arguments must be reduced to constants first, before the actual addition can be done.
+Although this system uses lazy evaluation, this is the moment where actual data is required, so reductions of the arguments are forced.
+To this extent, the system pushes the non-constant argument $\lexpr.\thefunc{inc} 5;$ on the stack, which is reduced to $\lexpr.+ 5 1;$.
+This is done in step~4.
+Hence, there can be multiple pointers on the stack, which point to terms that are currently being reduced.
+After full reduction, the term $\lexpr.\thefunc{inc} 5;$ is eventually replaced by the constant $6$ in step~5.
+The argument of the $+$, which the root pointer points to, is now fully reduced to a constant and therefore popped from the stack.
+Now, the actual addition can be done.
+
+Finally, step~6 creates the constant $7$ on the heap, which is the result of the program.
+Now, all other terms are unreachable, hence dead, but still occupy heap space.
+Later, we will discuss the garbage collector that will free this memory.
+
+A simplified implementation of the (program-independent) C++ classes is shown in \vref{lst:concurrency:lib}.
+Among many other details, handling of superfluous function arguments and partial function application are left out.
+\Cref{lst:concurrency:example_programs} shows two programs.
+Because \thecmd{g++} is used, optimizations are only applied at the C++ level; \thecmd{g++} is oblivious of the functional properties of the program.
+Although adapting \ac{GHC} and using \ix{Haskell} is possible, modifying the fundamentals of such a large system is practically not feasible within the time constraints of our project.
+
+\begin{lstcode}[float,caption={Simplified C++ implementation of \ourfp},label=lst:concurrency:lib,
+	variable={c,t,args,to,indirected,i,func,arg,mult,add,par},
+	type={Term,Application,Constant,Function},
+]
+class Term {						// generic lambda-term super class
+	Term& indirected;
+public:
+	Term& operator()(int c){
+		return *new Application(*this,*new Constant(c));}
+	Term& operator()(Term& t){
+		return *new Application(*this,t);}
+	virtual Term& Reduce(){return *this;}
+	virtual Term& Evaluate(Term& args...);	
+	virtual void SetIndirection(Term& to){indirected=to;}
+};
+
+class Constant : public Term {		// an (int) constant
+	int i;
+public:
+	Constant(int i) : i(i) {};
+	virtual void SetIndirection(Term& to){}
+};
+
+class Application : public Term {	// function-argument application
+	Term &func,&arg;
+public:
+	Application(Term& func,Term& arg) : func(func), arg(arg) {};
+	virtual Term& Reduce(){return SetIndirection(func.Evaluate(arg));}
+	virtual Term& Evaluate(Term& args...){return func.Evaluate(arg,args...);}
+};
+
+class Function : public Term {		// a wrapper for a C++ function
+public:
+	Function(Term& (*func)(...));
+	virtual Term& Evaluate(Term& args...){return func(args...);}
+};
+
+Function mult,add,par,pseq;			// some functions of a standard library
+\end{lstcode}
+
+\begin{lstcode}[float,caption={Example programs in \ourfp},label=lst:concurrency:example_programs,
+	variable={mult,add,x,sqr,cylinder,main,inc,pi,r,a},
+	type={Term,Function},
+]
+// cylinder program
+Term& sqr_func(Term& x){			return mult (x) (x); }
+Function sqr(sqr_func);
+Term& cylinder_func(Term& r){		return mult (mult (pi) (sqr (r))); }
+Function cylinder(cylinder_func);
+Term& main_func(){					return cylinder (2) (5); }
+Function main(main_func);
+
+// parallel version of the double inc program
+Term& inc_func(Term& x){			return add (x) (1); }
+Function inc(inc_func);
+Term& main_func(){					Term& a = inc (5);
+									return par (a) (inc (a)); }
+Function main(main_func);
+\end{lstcode}
+
+The implementation supports integers, (complex) doubles, and arbitrary large numbers via the \noac{GNU}~\noac{MP} library, although the language is in principle untyped.
+Therefore, the compiler does not check these types.
+%A list is defined as a chain of Church pairs, which is a function $\lambda r.\lambda l.\lambda c.c\;r\;l$ assuming that the function $c$ returns either $r$ or $l$, depending whether the right or left term is requested.
+Because C++03 does not allow anonymous functions, the \fxlambda-expression of the form $\lexpr x.M;$ should be lambda lifted~\cite{johnsson:lambda_lifting}, which means that they can only be defined as a named function, like \thefunc{sqr}, \thefunc{cylinder}, and \thefunc{inc} in \cref{lst:concurrency:example_programs}, and not occur somewhere inline.
+
+\label{s:concurrency:memlayout}
+
+Given the information required for \lterms* in general and the described approach to execute \fxbeta-reductions, we derive a generic memory layout, which is depicted in \vref{fig:concurrency:memlayout}.
+All terms have in common that they contain their type (the \emph{vpointer}, in C++ lingo).
+Next, administrative fields for \ac{GC} are added, which depend on the specific \ac{GC} approach.
+A constant only has to contain the raw data.
+An application requires a pointer to the argument term that is applied, and a pointer to the function term that the argument is applied to.
+(When a function requires multiple arguments, a chain of applications is used by means of currying.)
+A (named) function, like \thefunc{sqr}, needs to store the function pointer, \eg, to \lsticode|sqr_func|, to call upon computation.
+
+\begin{figure}%
+\inputfig{figures/conc_memlayout}%
+\caption{Memory layout of \lterms}%
+\label{fig:concurrency:memlayout}%
+\end{figure}
+
+Constants cannot be reduced any further.
+Since the size of the reduction result of the other types of \lterms is unknown on beforehand, it is in general not possible to replace terms by their result in-place.
+Instead, new memory is allocated for the result, and an indirection pointer to that result is set.
+Therefore, functions without arguments and applications need to contain room for the indirection pointer to the eventual reduction result.
+
+When this indirection pointer is set, the term is superseded.
+Then, the function and argument that are pointed to, are not considered to be required anymore and can be garbage collected eventually.
+Hence, all contents of the \lterms as shown in \cref{fig:concurrency:memlayout} are constant after initialization of the term, except for the indirection pointer.
+
+\subsubsection{Worker threads and parallelism}
+
+\ix[concurrency]{Concurrency} is exploited by running one worker thread per core, which concurrently reduces parts of the program.
+Each thread has its own heap that contains \lterms*.
+Parallelism is introduced by the \thefunc{par} function, which is very similar to the one of Parallel Haskell.
+The programmer has to use the \thefunc{par} function in order to run (parts of) the program in parallel; this is not done automatically.
+This function pushes one of its arguments on a work \ix{queue}, allowing other workers to pick it up and start to eagerly reduce the term.
+A standard library defines \thefunc{par} as follows:
+\begin{align*}
+\thefunc{par}	& = \lexpr x y.y;											& & \text{, and $x$ is put on a work queue during \fxbeta-reduction.} \\
+%
+\intertext{%
+The side-effect of \thefunc{par} does not influence the outcome of the program; it only triggers the start of a parallel execution.
+The earlier example is modified to use \ix[par@\thefunc{par}]{\thefunc{par}} as follows:%
+}
+%
+\thefunc{main}	& = \lexpr.\thefunc{par} a ({\lexpr.\thefunc{inc} a;});		& & \text{, where $a=\lexpr.\thefunc{inc} 5;$;} \\
+\thefunc{inc}	& = \lexpr x.+ x 1;											& &
+\end{align*}
+The outcome of the program is still 7.
+However, $\lexpr.\thefunc{inc} 5;$, which is labeled $a$, can be computed by another worker than the one that computes \thefunc{main}.
+The first few reduction steps of this program are:
+\begin{align*}
+1:\quad & \thefunc{main}																							& \lcred{}
+2:\quad & \lexpr.\thefunc{par} ({\lexpr.\thefunc{inc} 5;}) ({\lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});});	& \lcred{}
+3:\quad & \lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});															& \lcred{}
+4:\quad & \lexpr.+ ({\lexpr.\thefunc{inc} 5;}) 1;																	& & \ldots %\lcred{}
+%5:\quad & +\:6\;1																	& \lcred{}
+%6:\quad & 7																		&
+\end{align*}
+
+The corresponding states of the machine that executes these reduction steps, is depicted in \vref{fig:concurrency:evaluation_par}.
+\begin{figure}%
+\inputfig{figures/conc_lambda_par}%
+\caption{Example of evaluation with \thefunc{par}}%
+\label{fig:concurrency:evaluation_par}%
+\end{figure}%
+At step~2, the heap contains the application of the two arguments to \thefunc{par}.
+The variable $a$ is temporarily put on the stack while constructing the applications to \thefunc{par}.
+This way, both references to $\lexpr.\thefunc{inc} 5;$ point to the same application, which prevents that the application is created and computed twice.
+This is necessary to ensure that once $\lexpr.\thefunc{inc} 5;$ is reduced, both uses of the term see this reduction result.
+
+Next, at step~3, the first argument to \thefunc{par}, which is $\lexpr.\thefunc{inc} 5;$, is pushed on the work queue, and the worker thread continues the evaluation with reducing $\lexpr.\thefunc{inc} ({\lexpr.\thefunc{inc} 5;});$.
+In the figure, the double border indicates that the data is shared among threads.
+The work queue only contains a reference to $\lexpr.\thefunc{inc} 5;$, although it is not shown in the figure.
+Assume that another worker thread removes this reference from the work queue and starts evaluating it.
+Now, two worker threads are concurrently executing the application.
+This is depicted by the bottom two states of the figure: the bottom left state shows the initial worker that already executed the previous steps, the bottom right state is the other worker that just concurrently computed $\lexpr.\thefunc{inc} 5;$ to the constant $6$.
+This saves the initial worker some time, as the addition of $\lexpr.\thefunc{inc} 5;$ and $1$ can be executed immediately, in contrast to the evaluation steps in \cref{fig:concurrency:evaluation}.
+
+So, \thefunc{par} allows work to be computed concurrently, but it does not guarantee that it will be done that way.
+It is possible that all other workers are busy, and the work is never picked up from the queue, after which the original worker has to perform the task anyway.
+Moreover, there exists a race condition where two workers start computing the same term simultaneously.
+We will address this race condition in more detail later on.
+
+\Thefunc{par} is useful when a significant amount of work can be sent to another worker thread.
+Consider the following definition, which (inefficiently) calculates the Fibonacci number of a given index in the sequence.
+\begin{align*}
+\thefunc{fib}	& = \lexpr n.1;				& & \text{, when $n\le2$;} \\
+\thefunc{fib}	& = \lexpr n.+	({\lexpr.\thefunc{fib} ({\lexpr.- n 1;});}) 
+								({\lexpr.\thefunc{fib} ({\lexpr.- n 2;});});
+											& & \text{, otherwise;} \\
+\thefunc{pfib}	& = \lexpr n.\thefunc{pseq}
+								({\lexpr.\thefunc{par} a b;})
+								({\lexpr.+ a b;});	
+											& & \text{, \begin{varwidth}[t]{.5\linewidth}where $a=\lexpr.\thefunc{fib} ({\lexpr.- n 1;});$, and\\\strut%
+																				\phantom{where} $b=\lexpr.\thefunc{fib} ({\lexpr.- n 2;});$.\end{varwidth}} \\
+%
+\intertext{%
+Where \thefunc{fib} calculates the Fibonacci number by one worker, \thefunc{pfib} puts $a$ on a work queue first to be computed in parallel, then calculates $b$ itself, and adds them afterwards.
+This program uses \thefunc{pseq}.
+This function breaks the normal lazy reduction order by forcing to compute the first argument before continuing with the rest.
+Similar to \thefunc{par}, \thefunc{pseq} is defined in a standard library:}
+%
+\thefunc{pseq}	& = \lexpr x y.y;			& & \text{, \begin{varwidth}[t]{.5\linewidth}and $x$ will be fully reduced first\\\strut upon \fxbeta-reduction of \thefunc{pseq}.\end{varwidth}}
+\end{align*}
+
+In practice, \thefunc{par} is used as an annotation to indicate that the value of its argument is expected to be needed in the future, and that the programmer expects that its computation might take some time.
+Therefore, it is beneficial to start computing on \thefunc{par}'s argument in parallel, which is $a$ in the example above.
+On the other hand, \thefunc{pseq} is used to annotate that it is beneficial to compute its argument immediately, instead of lazily.
+In combination with \thefunc{par}, this gives control over the distribution of workload over the workers.
+So, the functions \thefunc{par} and \thefunc{pseq} do not influence the outcome of the program, but are just hints how the program might be executed faster.
+%Both $a$ and $b$ are variables that point to a \lterm, which will eventually indirect to a constant.
+%When the addition of $a$ and $b$ is calculated, the worker has to follow the indirection pointers, until it encounters this constant term.
+%Since \thefunc{par} does not guarantee that the computation of $a$ will be finished before the addition.
+%If $a$ was not computed yet at the time of the addition, it will be computed when the value is needed.
+
+The combination of worker threads and \thefunc{par} introduces the notion of local and shared data: all data is local, until it is applied to \thefunc{par}.
+In order to share the data with other workers, the term is then made globally visible, which influences how it is determined whether a term is dead or not, and how data should be accessed regarding memory consistency.
+The implementation ensures that local terms can refer to both local and global, \ie shared, ones, but global terms only refer to other global terms~\cite{anderson:private_nursery_gc}.
+So, terms are either \ix[global lambda-term@global \lterm]{global} or \ix[local lambda-term@local \lterm]{local} and are always owned by the worker thread that owns the heap a term resides in.
+
+As \thefunc{par} hints that its argument requires a significant amount of work to compute, it is probably wise to make sure that this computation is done only once. %, in contrast to the example of \vref{fig:concurrency:computation}.
+To this end, when one worker evaluates the term and another one requires it meanwhile, the second worker should \emph{stall} until the first one has finished computation.
+If the second worker would also start computing the term, compute power is wasted.
+So, \ix[par@\thefunc{par}]{\thefunc{par}} does the following:
+\begin{enumerate}
+\item Make sure that the term is globally visible, by duplicating it as a global term.
+	Such a global term can reside in the same heap as the local term does, but the C++ class just handles accesses to it differently.
+\item Add a \emph{\ix{black hole}} to prevent double work, by indicating that a term is `under evaluation', such that other workers can wait for the result.
+	In the implementation, a black hole is a subclass of \lsticode|Term|.
+	Upon reduction of the black hole, it eagerly reduces the term it protects, \ie points to, and sets the black hole's indirection pointer to the result afterwards.
+	When another worker tries to reduce the black hole, it stalls until the indirection pointer is written.
+\item Put a reference to the black hole (and therefore the duplicated term) on a work queue.
+\item Set the local term's indirection pointer to the newly created (black hole that protects the) equivalent global term.
+\end{enumerate}
+
+We have seen above that a worker can be in a few different phases: idle when out of work, running \fxbeta-reductions, stalling on a black hole, and doing \acl{GC}.
+Later on, we present experimental results regarding the time spent in these phases.
+Unlike \ac{GHC}, when evaluation of a term blocks (for example on a term that is currently evaluated by another worker), the worker thread just blocks; no context switching has been implemented between evaluation of multiple (unrelated) terms.
+
+Everything that happens at run time, such as doing \fxbeta-reductions, handling of distribution of work among workers, allocation, and garbage collection of memory, are part of the \acix{RTS}.
+
+\subsubsection{Local \texorpdfstring{\protect\vs}{vs.} global garbage collection}
+
+\glsreset{GC}
+
+There exist multiple approaches to \ac{GC}.
+As the concepts of this chapter are independent of the chosen approach, we consider the approach and implementation of garbage collection less relevant.
+Therefore, we only briefly discuss a high-level overview of the approach that is used in \ourfp.
+We chose to use a mark--sweep approach~\cite{jones:gc_handbook}.
+The algorithm works according to the following steps:
+1)~it marks all terms on its heap as dead; then
+2)~it marks all terms that are pointed to from the program stack, as alive; next
+3)~it follows pointers from living terms to other terms, until no new living term is found; and finally
+4)~all dead terms are freed.
+To find the root of the computation, the stacks of the worker threads must be inspected to find whether there are active references to terms.
+As this stack also contains other data, like function return pointers and (possibly outdated) register contents, properly finding these active references is hard.
+Therefore, we use a shadow stack~\cite{henderson:gc_in_uncoop_env}, which tracks only the \lterm references on the normal C++ stack.
+
+There are two flavors of \acix{GC}:
+\begin{itemize}
+\item Local:
+	Only local terms are cleaned from the heap.
+	This can be done independent of other workers, because it is guaranteed that no local terms are used by other workers.
+	All encountered shared, \ie global, terms are assumed to be alive.
+	Because only locally accessible terms are processed during local \ac{GC}, memory consistency is irrelevant; no other worker reads or writes these terms.
+\item Global:
+	Both local and global terms are cleaned from all heaps.
+	This can only be done in a stop-the-world fashion, where all workers stop the current evaluation and participate in a \ac{GC} run.
+	The synchronization between workers can be done by a (Pthread) barrier.
+	Although using such a barrier could be relatively costly when the implementation is based on polling memory, it does not influence the performance much, as this is a relatively rare operation---later on we present measurements, which indicate that \fxbeta-reductions are done orders of magnitude more often.
+	For example, a shared-memory polling-based algorithm like the bakery lock~\cite{lamport:mutex} suffices.
+	As we focus in this chapter on concurrency issues during evaluation, a discussion about the internals or optimization of the \ac{GC} is beyond the scope of this work.
+	Moreover, as the \ac{GC} is written in `normal' C++, it uses weak memory models in a general fashion, which has been covered \cref{c:memory}.
+\end{itemize}
+The local \ac{GC} is invoked when the currently allocated heap memory is exhausted, which happens a dozen times per second.
+When not enough garbage is collected, more memory is requested from the \ac{OS}.
+Global collection is invoked every second, but never in the midst of an arbitrary function; the \ac{RTS} can only switch to \ac{GC} when it is idle, or a new term has to be created and new memory is allocated.
+In contrast to interrupts, which can arrive at any time, the execution of the program and the system are therefore always in a known state.
+
+\subsection{The atomic-free core: data races and lossy work queue}
+
+\label{s:concurrency:races}
+
+%As discussed \cref{s:concurrency:lambda}, computation in \lcalc is done by repeatedly doing $\upbeta$-reduction on a term.
+%A term cannot be reduced any further when it is already a constant, or it is a function that did not get enough arguments to be executed, like a multiplication with only one operand.
+%A practical implementation replaces a reduced term by the reduction result.
+%Because the result does not have to be of the same size, it is easier to allocate new memory for the result, and set an indirection pointer to that result.
+%Given the information required for \lterms in general and this approach to do $\upbeta$-reductions, we derive a generic memory layout, as depicted in \cref{fig:concurrency:memlayout}.
+
+As discussed \cref{s:concurrency:lambda}, computation in \lcalc is done by repeatedly doing \fxbeta-reduction on a term, until it results in a constant, or it is a partially applied function.
+Since a \fxbeta-reduction is side-effect free, it is safe to allow some non-determinism.
+
+\Cref{fig:concurrency:computation}(a) exemplifies a part of the total graph during step~4 of the example with the double \thefunc{inc} of \cref{s:concurrency:double_inc}.
+\begin{figure}%
+\inputfig{figures/conc_reduction}%
+\caption{Steps in computation}%
+\label{fig:concurrency:computation}%
+\end{figure}%
+When the application of \thefunc{inc} and $5$ is \ix[*beta-reduction@\fxbeta-reduction]{reduced}, the result is $6$, and the application term is indirected to this result.
+\Cref{fig:concurrency:computation}(b) shows the graph when two workers have reduced this term at the same time.
+Both workers can update the indirection pointer, which results in a \ix{data race}.
+However, it does not matter how others observe this update; the result is the same either way.
+During \ac{GC}, the race is reconciled, and one result is properly discarded.
+
+Setting the reduction result does not require locks, when we assume that writing the indirection pointer is atomic.
+However, there does not have to be a well-defined (total) order in writing this pointer.
+The fact that this race condition can safely be ignored, is a great potential for performance improvement by using a weak memory model, since synchronization requirements relax.
+\Cref{s:concurrency:memory} will define what is required to allow these races.
+
+The argument why data races can be allowed during evaluation, also applies to the distribution of work: duplication of terms is not a problem, since the result is always the same.
+As mentioned before, a queue is used that is populated using \ix[par@\thefunc{par}]{\thefunc{par}}.
+\Ac{GHC} implements such a queue as a lock-free (work-stealing) \ac{FIFO} queue.
+Its implementation does not lock a mutex, which otherwise might prevent other threads to progress when the thread that locked it, is context-switched or blocks on a shared resource, for example.
+However, a lock-free data structure is based on atomic \ac{RMW} operations, such as a compare-and-swap~\cite{herlihy:concurrent_objects}.
+These operations are hard to implement in hardware and, more importantly, not required for our queue.
+
+We chose to design this queue as a \emph{\ix{lossy stack}}.
+The rationale behind the choice for a stack instead of a \ac{FIFO} queue, is that newly pushed work onto the stack is more relevant to start computing on than older terms, as these older terms are more likely to be computed already by the thread that pushed it.
+The stack can be lossy, because it is allowed that race conditions prevent terms from being pushed at all, and that popped terms are popped twice at the same time.
+In the former case, the thread that pushed the work will compute the term by itself when required, in the latter case, the black hole will prevent doing the work twice.
+%This is a slight performance penalty, but countermeasures (like using locks or \ac{RMW} operations) might be more costly than the incidental losses/duplicates in practice.
+
+Here is a \ix{trade-off} between allowing incidental losses/duplicates over using locks or \ac{RMW} operations.
+In systems with hardware support for \ac{RMW} instructions, using them can be beneficial.
+However, we show that the lossy stack allows avoiding \ix[atomic]{atomics}, but still guarantees correct program behavior.
+
+\label{s:concurrency:FENCE}
+
+Pseudo-code of the implementation of the lossy stack is shown in \vref{lst:concurrency:stack}.
+The \ix{annotations} \ann{fence} and \ann{flush} behave as defined in \cref{c:memory}.
+The writes to \lsticode|m_queue| and \lsticode|m_top| are not protected by a lock, so data races occur.
+The \annix{FENCE}\index{fence} annotation is similar to a normal fence, but differs at one crucial point.
+It does not only guarantee that operations before will be executed earlier than those after the fence, but it must also make sure that all writes to the specified object, \eg, \lsticode|m_queue[top]| at \cref{l:stack_object}, \emph{complete} before later writes.
+Hence, processes observe a \emph{global order} between writes to the specified object before the \ann{FENCE}, and writes to \emph{any} location after the \ann{FENCE}.
+Because this ordering is stricter than is defined for \ann{fence}, the function name is capitalized to express the difference.
+The next section relates this additional guarantee to the \ann{fence} annotation used in \ac{PMC}.
+
+\begin{lstcols}{2}%
+\begin{lstcode}[
+	variable={m_top,m_queue,term,top,res},
+	type={LossyStack,Term},
+	constant={SIZE},
+]
+class LossyStack {
+	int volatile m_top;
+	Term* volatile m_queue[SIZE];
+public:
+	LossyStack() : m_top() {}
+
+	void push(Term* term){
+		int top=m_top;
+		if(top<SIZE){
+			// write object
+			m_queue[top]=term;$\label{l:stack_object}$
+			// make sure pointer is
+			//  written after term
+			FENCE(m_queue[top]);
+			// increment pointer
+			m_top=top+1;
+			flush(m_top);
+		}
+	}
+
+	Term* pop(){
+		int top=m_top;
+		// make sure pointer is
+		//  read before term
+		fence();
+		if(--top>=0){
+			// read term
+			Term* res=m_queue[top];
+			// decrement pointer
+			m_top=top;
+			flush(m_top);
+			return res;
+		}else
+			return NULL;
+	}
+
+};
+\end{lstcode}%
+\caption{Lossy stack}%
+\label{lst:concurrency:stack}%
+\end{lstcols}
+
+During global \ac{GC}, the contents of the lossy stack are also used as the roots of computation.
+Although there are several race conditions in the implementation of \vref{lst:concurrency:stack}, these are only relevant during evaluation of the program.
+It is safe to walk over the stack during global \ac{GC}, because no worker modifies the stack at that time.
+Race conditions during evaluation are addressed in the next section.
+
+
+\section{Impact on memory consistency and synchronization}
+\label{s:concurrency:memory}
+
+When a functional program is executed concurrently, multiple worker threads reduce terms at the same time and might even reduce the same term simultaneously.
+\Cref{s:concurrency:races} showed that \lterms are constant during their lifetime, except when the indirection pointer is set after reduction and the term becomes superseded.
+Based on this sequence, we can derive rules how the memory should behave such that races are allowed, but the program's result is deterministic.
+
+This section relates these rules imposed by the programming paradigm to the memory model of the hardware.
+%First, we briefly discuss memory models in general.
+We will focus on operations on \lterms, and then make the translation to operations on memory locations and \ac{PMC}.
+
+\subsection{A \lterm's life and rules}
+
+\newcommand{\markphase}[1]{\tikz[remember picture]{\coordinate (#1l) at (0,.8em);\coordinate (#1r) at (\linewidth,.8em);}}
+\newcolumntype{P}{{@{}>{\bodyfont\hfill}p{2ex}@{\mbox{}\hspace{1.25ex}}>{\bodyfont\strut}p{.6525\linewidth}@{\mbox{}\hspace{3ex}}>{\bodyfont}p{.27\linewidth}@{}}}
+
+\newcommand{\phasedesc}[4]{%
+\begin{tikzpicture}[
+	overlay,remember picture,
+	phase/.style={anchor=west,outer sep=0,inner sep=1ex},
+	local/.style={phase,fill=black!15},
+	global/.style={phase,fill=black!3},
+	]
+	\path let
+		\p1=(#2l), \p2=(#2r), \n1={\x2-\x1-2ex},
+		\p3=(#3l), \n2={\y1-\y3} in
+		($(#2l)!.5!(#3l)$) node[phase,minimum height=\n2,text width=\n1,#1] {\parbox{\linewidth}{\strut\noindent\justifying#4\strut}};
+	\draw[very thick,niceblack]
+		(#2l) -- (#2r)
+		(#3l) -- (#3r);
+\end{tikzpicture}}
+
+Every \lterm* has the following sequence of phases during its lifetime: \vspace{1em}\\
+\noindent\begin{tabular}{P}
+1.  & \emph{Allocation on the worker's heap} & \markphase{phase1} \\
+	& A term is either local or global, depending on the context in which it is created.
+	  They can share the same heap, but accessing a global term requires attention regarding memory consistency, which is discussed in a moment. & \\
+2.  & \emph{Initialization of the memory} &  \markphase{phase2} \\
+	& In our case, the constructor of the C++ object takes care of this. & \\
+	& & \markphase{phase2e} \\
+\end{tabular}%
+\phasedesc{local}{phase1}{phase2e}{%
+	\emph{private access:} \vspace{1ex}\\
+	Only the owning thread accesses the \lterm.
+	The term's content is constant after initialization.%
+}\vspace{-1em}\vspace{-3pt}\\%
+\begin{tabular}[t]{P}
+3.  & \emph{Indirecting another term to this one} & \markphase{phase3} \\
+	& A term is always a result of a reduction, so there exists a term that is replaced by the newly created one.
+	  Setting an indirection pointer to the new term will make it visible for other workers, which might follow the pointer. & \\
+4.  & \emph{Replace the term by the result of a reduction} & \markphase{phase4} \\
+	& After \fxbeta-reduction, the indirection pointer is set, which is the same operation as of phase~3, but from a different perspective.
+	  A race condition exists, because multiple workers might reduce the same term simultaneously. & \\ 
+	& & \markphase{phase4e} \\
+\end{tabular}%
+\phasedesc{global}{phase3}{phase4e}{%
+	\emph{shared access:} \vspace{1ex}\\
+	The term is valid and globally accessible.
+	Only the indirection field can be overwritten by concurrent threads.%
+}\vspace{-1em}\vspace{-3pt}\\%
+\begin{tabular}{P}
+5.  & \emph{Term dies} & \markphase{phase5} \\
+	& When no pointer exists to this term, it becomes unused and can be garbage collected.
+	  Because the number of pointers to a term change at run-time, and it is subject to data races, this event is not detected during evaluation.
+	  Only during \ac{GC}, the application graph is stable and can be analyzed. & \\
+6.  & \emph{Deallocation during \ac{GC}} & \markphase{phase6} \\
+	& At this point, the heap memory is freed. & \\
+	& & \markphase{phaselast} \\
+\end{tabular}\vspace{-.5em}%
+\phasedesc{local}{phase5}{phaselast}{%
+	\emph{private access:} \vspace{1ex}\\
+	The owning thread destructs and cleans up the term.%
+}
+
+From this list, we can identify all operations that can be executed on a term, namely:
+\emph{construction} (phase~1 and 2);
+\emph{read} (during phase~3 and 4), where a worker reads the term after following a pointer to it;
+\emph{indirect} (phase~4), where a worker sets the indirection pointer to the reduction result; and
+\emph{destruction} (phase~6).
+For these operations, we discuss which guarantees, \ie rules, are necessary to be implemented by the platform.
+Such a guarantee is something a worker thread can assume to be always valid.
+
+Although the intended behavior of the operations identified above is rather straightforward, the interaction between these rules is more complicated.
+In a similar manner as \cref{c:memory} defined how reads and writes behave, the four \ix[memory operations]{operations} on \lterms have rules that define the required orderings to properly allow the execution of a functional program.
+%This section defines these rules for all pairs of operations.
+%Any platform should comply to these rules, by hardware support, software layers or a combination of both.
+
+Construction of a term is obviously more than just a single read or write of memory.
+However, only the worker that creates the term can access this memory, because other workers do not have knowledge about its existence yet.
+So from a \ix[memory (consistency) model]{memory consistency} point of view, this can be seen as a single operation.
+Any consecutive operation on the term should see the constructed term, which leads to the formulation of the following rule the memory subsystem must comply with:
+\begin{ruledef}[Construction]\label{rule:construct}%
+	Any worker that executes an operation on an existing term should observe that its construction has been completed.
+\end{ruledef}
+Although this sounds trivial, it means that the underlying system must make sure that the initialization of the term is completed and globally visible before a pointer to it is exposed to another worker.
+So, when another worker reads or sets the indirection pointer, the platform must make sure that the term's construction has been completed.
+
+When an indirection pointer of a term is set, the following rule must apply:
+\begin{ruledef}[Indirect]\label{rule:indirect}%
+	Setting the indirection pointer from term $t_1$ to term $t_2$ is atomic and in globally total order with respect to other operations on term $t_1$ by the same worker and the construction of $t_2$.
+\end{ruledef}
+The restriction that writes should be atomic is usually already fulfilled by hardware, because pointers have (usually) the size of one machine word.
+If that is not the case, writing such a pointer will have overhead by locking and unlocking the related memory location.
+As described in \cref{s:concurrency:races}, writing the indirection pointer twice does not harm the outcome of the program.
+Therefore, such writes do not have to be in total order, which is usually the case for memory models.
+The non-determinism by this data race is allowed, but should be solved during \ac{GC} later on.
+
+Next, workers can read a term, possibly multiple times.
+\begin{ruledef}[Read]\label{rule:read}%
+	Reads of a term are in a total order with respect to other operations on the same term by the same worker.
+\end{ruledef}
+
+During \ac{GC}, the program state is analyzed for dead terms.
+These terms should not be accessed afterwards.
+\begin{ruledef}[Garbage collection]\label{rule:gc}%
+	Before a worker destructs a term, all reads and indirections by any worker should be completed first.
+\end{ruledef}
+This also means that after destruction, no worker should read or indirect the term anymore---otherwise the garbage analysis was faulty.
+Because the state of the memory is fixed during \ac{GC}, any non-determinism in the indirection pointers can be solved by completing all outstanding writes first.
+This results in a single state of the application, which every worker agrees on.
+
+For every pair of executed operations, one of the four rules applies.
+\Vref{t:concurrency:operations} summarizes which rule applies for every pair of a previously executed operation and a new one.
+
+\newcommand{\impossible}{\tikz[x=.5ex,y=.5ex]{\draw[thick,red!50!black!75] (-1,1) -- (1,-1) (-1,-1) -- (1,1);}}
+\ctable[caption={Rules that pairs of operations on \lterms are subject to},label=t:concurrency:operations]{
+	clc|*{4}{>{\hspace{-.5ex}\figureversion{text,prop}}c}}{
+	}{\FL
+&				&				& \multicolumn{4}{c}{new operation}														\NN
+&				&				& \SYMopconstr	& \SYMopindirect		& \SYMopread			& \SYMopdestr			\ML
+\multirow{4}{*}{\tikz[baseline=-2pt]{
+	\path[use as bounding box] (-1em,0) rectangle (1em,0);
+	\node[rotate=90,inner sep=0,outer sep=0,anchor=center] (n) at (0,0) {\parbox{15ex}{\centering previous operation}};}}
+& construction	& \SYMopconstr	& \impossible	& \ref{rule:construct}	& \ref{rule:construct}	& \ref{rule:construct}	\NN
+& indirect		& \SYMopindirect& \impossible	& \ref{rule:indirect}	& \ref{rule:read}		& \ref{rule:gc}			\NN
+& read			& \SYMopread	& \impossible	& \ref{rule:indirect}	& \ref{rule:read}		& \ref{rule:gc}			\NN
+& destruction	& \SYMopdestr	& \impossible	& \impossible			& \impossible			& \impossible			\LL
+\multicolumn{7}{l}{\footnotesize\hspace{-1ex}\impossible {} Impossible}													\NN
+}
+
+\subsection{Mapping from rules to \acsh{PMC}}
+
+For \aclixmc{SC}, the four rules of the previous section are trivial to guarantee; the memory model gives all guarantees already.
+For weaker models, specific countermeasures have to be taken to give the guarantees by the platform.
+
+The \lcalc-based programming model does not expose the memory model to the programmer.
+Therefore, an implementation of the language can use optimizations for the specific memory model of the hardware it is compiled for.
+However, the memory abstraction, as defined by \acix{PMC} in \cref{c:memory}, is also useful to use in this case.
+One can imagine that the \ac{RTS} of \ourfp is implemented in such a way, that it supports multiple target architectures.
+To be concrete, we run the same \ac{RTS} on an Intel platform, as well on \Starburst* using software cache coherency.
+Therefore, the \ac{RTS} is built upon the memory model and annotations of \ac{PMC} to properly support both memory architectures at the same time.
+Note that the application programmer does not specify the annotations for \ac{PMC} by hand, but the compiler and \ac{RTS} insert them automatically.
+
+A straightforward way of applying \ix{annotations} that conform to all rules, is to wrap all operations inside an \ann{entry_x}--\ann{exit_x} pair, which guarantees exclusive access.
+In this way, the memory orderings are as strict as \acl{SC}.
+However, using exclusive access defies the purpose of atomic-free execution, and it is stricter than necessary.
+Therefore, we define what is required to implement the rules in this context.
+
+\subsubsection{Unprotected write access}
+
+The first two rules, \cref{rule:construct,rule:indirect}, define that a thread writes a term for either construction or indirection.
+According to \ac{PMC}'s annotation guidelines, every write should be wrapped in a scope with exclusive access.
+This is a reasonable approach, assuming that an application is programmed using an imperative language like C, and reasoning about state is a key feature of such a language.
+However, in \ourfp, it is guaranteed that no two workers can construct the same term at the same time, or data races in writes are allowed, so using a lock is unnecessary.
+Because of this change in assumptions, we define a new type of access scope in addition to exclusive (read/)write access and non-exclusive read-only access: \emph{non-exclusive (read/)write access}.
+
+Such a non-exclusive write access has exactly the same semantics as \ann{entry_x} and \ann{exit_x}, except that the underlying \ix{acquire} after a release is ordered \SYMorderprog* on all releases of the same process on the same location, instead of the synchronization order \SYMordersync*.
+Therefore, it does not take a mutual exclusive lock on the object.
+In a similar way as \vref{t:memory:operations} is defined, the ordering of the non-exclusive acquire and release is defined by \vref{t:concurrency:memoperations}.
+Let us use \annix{entry_w} and \annix{exit_w} as annotation for such a scope.
+It has an important consequence: concurrent \ann{entry_w}--\ann{exit_w} pairs lead to \ix[data race]{data races}, or more specifically, the last write set \SYMlastwrite* can have multiple elements.
+
+\ctable[
+	caption={Orderings between operations on location, \protect\ie \lterm, \SYMvar by process \SYMproc, which are based on \vref{t:memory:operations}, and tailored to \ourfp's requirements},
+	label=t:concurrency:memoperations]{clc|*{6}{>{\hspace{-.5ex}}c}}{
+	}{\FL
+&							&									& \multicolumn{6}{c}{new operation} \NN
+&							& pattern							& \SYMopread		& \SYMopwrite		& \SYMopreleasenx	&  \SYMopacquirenx	& \SYMopfence		& \SYMopFENCE		\ML
+\multirow{6}{*}{\tikz[baseline=-2pt]{
+	\path[use as bounding box] (-1em,0) rectangle (1em,0);
+	\node[rotate=90,inner sep=0,outer sep=0,anchor=center] (n) at (0,0) {\parbox{15ex}{\centering previous operation}};}}
+& read						& \SYMread[\SYMproc][\SYMvar]		& \SYMorderlocal	& \SYMorderlocal	& \SYMorderlocal	&					& \SYMorderlocal	& \SYMorderlocal	\NN
+& write						& \SYMwrite[\SYMproc][\SYMvar]		& \SYMorderlocal	& \SYMorderprog		& \SYMorderprog		&					& \SYMorderlocal	& \SYMorderprog		\NN
+& non-exclusive acquire		& \SYMacquirenx[\SYMproc][\SYMvar]	& \SYMorderlocal	& \SYMorderprog		& \SYMorderprog		&					& \SYMorderfence	& \SYMorderfence	\NN
+& non-exclusive release		& \SYMreleasenx[\SYMproc][\SYMvar]	&					&					&					&  \SYMorderprog	& \SYMorderfence	& \SYMorderfence	\NN
+& fence						& \SYMfence[\SYMproc]				&					&					& \SYMorderfence	&  \SYMorderfence	& \SYMorderfence	& \SYMorderfence	\NN
+& strong fence				& \SYMFENCE[\SYMproc]				&					& \SYMorderfence	& \SYMorderfence	&  \SYMorderfence	& \SYMorderfence	& \SYMorderfence	\LL
+}
+
+\Vref{lst:concurrency:deps} shows pseudo-code of how operations on \lterms should be annotated.
+\begin{parcodes}%
+\begin{parcol}{.78\linewidth}\vspace{1em}%
+Initially: \lsticode|Term t1| exists
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={t1,t2},type={Term},lst={escapechar=@}]
+ // construct 
+ Term* t2=t_alloc();// Allocate memory for term.
+ @\scstart{0}@entry_w(*t2);		// Only this process has a reference to
+					//  t2 so non-exclusive access is safe.
+ 	new(t2) Term();	// Invoke t2's constructor.@\label{l:node_lterm_ctor}@
+ 	FENCE(*t2);		// Force completion.@\label{l:node_lterm_fence}@
+ @\scend{0}@exit_w(*t2);
+
+ // indirect
+ @\scstart{0}@entry_w(t1);		// Non-exclusive, possible data race.
+ 	t1.SetIndirection(*t2);@\label{l:node_lterm_indir}@
+	flush(t1);		// optional
+ @\scend{0}@exit_w(t1);
+\end{lstcode}%
+\end{parcode}%
+\vspace{1em}\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={t1,t2},type={Term},lst={escapechar=@}]
+ // Assume indirection is set.
+ @\scstart{0}@entry_ro(t1);		// Poll indirection pointer of t1.
+	Term& t2=t1.GetIndirection();@\label{l:node_lterm_get}@
+ @\scend{0}@exit_ro(t1);
+ fence();			// Force order of access to t1 and t2.@\label{l:node_lterm_fence2}@
+
+ // read (use) term
+ @\scstart{0}@entry_w(t2);		// Non-exclusive, possible data race.@\label{l:node_lterm_acq}@
+ 	t2.Reduce();	// ...or any other method using t2.@\label{l:node_lterm_read}@
+ @\scend{0}@exit_w(t2);
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}%
+\begin{pardep}{.22\linewidth}
+	\opnode[at={(0ex,0ex)}]{lterm_ctor}{\SYMopconstr \lstinline|t2|}
+	\opnode[at={($(lterm_ctor)+(0,-12ex)$)}]{lterm_fence}{\lsticode|FENCE|}
+	\opnode[at={($(lterm_fence)+(0,-12ex)$)}]{lterm_indir}{\SYMopindirect \lstinline|t1|}
+	\opnode[at={($(lterm_indir)+(0,-12ex)$)}]{lterm_get}{\SYMopindirect?}
+	\opnode[at={($(lterm_get)+(0,-12ex)$)}]{lterm_fence2}{fence}
+	\opnode[at={($(lterm_fence2)+(0,-12ex)$)}]{lterm_acq}{acq \lstinline|t2|}
+	\opnode[at={($(lterm_acq)+(0,-12ex)$)}]{lterm_read}{\lstinline|t2|?}
+	\draw[global] (lterm_ctor) edge node[label left] {\SYMorderfence} (lterm_fence);
+	\draw[global] (lterm_fence) edge node[label left] {\SYMorderfence} (lterm_indir);
+	\draw[implicit] (lterm_indir) edge (lterm_get);
+	\draw[local] (lterm_get) edge node[label left,pos=.6] {\SYMorderlocal[2]} (lterm_fence2);
+	\draw[global] (lterm_fence2) edge node[label left] {\SYMorderfence} (lterm_acq);
+	\draw[local] (lterm_acq) edge node[label left,pos=.6] {\SYMorderlocal[2]} (lterm_read);
+\end{pardep}%
+\caption{Ordering dependencies of \lterm operations}%
+\label{lst:concurrency:deps}%
+\end{parcodes}%
+The construction of the \lterm \lstinline|t2| is wrapped in a non-exclusive write scope.
+At this point, no data races can occur, because no other process has knowledge of the existence of the term, so no process has a reference to that specific memory location.
+Setting the indirection pointer from \lstinline|t1| to \lstinline|t2| is also done with non-exclusive access.
+As multiple threads might do this simultaneously, a data race can occur, but this is not harmful, as discussed before.
+In the listing, process~2 receives the reference to \lstinline|t2| and uses this term afterwards.
+
+Communicating the term to other threads via setting an indirection pointer, resembles the example of \vref{fig:memory:example_poll}, where the variable \lstinline|X| is communicated to others by setting a flag.
+For that particular example, we argued that \ann{entry_x} was require to read \lstinline|X| at the receiver, because it was impossible to guarantee that the latest value of \lstinline|X| was read otherwise.
+The difference between the \lstinline|X| in that example and the term in \cref{lst:concurrency:deps} is that a \lterm is unknown to other processes upon construction.
+When other workers learn about a \lterm's existence, it initial value is that of the construction, in contrast to \lstinline|X|'s $\bot$.
+Hence, where a lock for \lstinline|X| was required, using locks for a term's construction is not.
+This shows that properties of the model of computation influence requirements of the memory model.
+
+\subsubsection{Stronger fence}
+
+To guarantee that construction is completed before any later operation on the term, the \annix{FENCE}\index{fence} comes into play, which was already introduced in \cref{s:concurrency:FENCE}.
+As defined before, it adds a global (fence) order between writes to the specified object, the term pointed to by \lstinline|t2| in this case, and any successive write.
+More precisely, the \ann{FENCE}[(t)] is identical to \ann{fence}, but adds the ordering \SYMorderprog* between earlier \memoppattern{\SYMopwrite}{\SYMproc}{\text{\lsticode|t|}}{} and the \ann{FENCE} operation, where \SYMproc is the executing process, and adds the ordering \SYMorderfence between the \ann{FENCE} and all later writes by the same process.
+This strong fence is also listed in \vref{t:concurrency:memoperations}.
+So, the \ann{FENCE} makes sure that the modifications to \lstinline|t2| are written to memory, before continuing to set the indirection, in this case.
+
+To use the reference to \lstinline|t2| by process~2, \ann{entry_w} is used to access \lstinline|t2|.
+In this case, \ann{entry_ro} cannot be used, as it does not enforce ordering between the read of the indirection pointer of \lstinline|t1| and \lstinline|t2|.
+On the other hand, \ann{entry_x} is too restrictive, as locking is not required.
+\ann{entry_w} does issue an acquire operation (although without locking), and therefore has a fence order \SYMorderfence, which will lead to the chain of dependencies as visualized by \cref{lst:concurrency:deps}.
+
+The \ann{FENCE} is also an important feature to realize the garbage collection rule, \cref{rule:gc}.
+In the mark phase of \acix{GC} analysis, a \ann{FENCE} should be used on the term that is marked.
+When the worker thread signals that is finished marking all active terms, the \ann{FENCE} makes sure that all outstanding writes will complete.
+Therefore, a worker thread either does not have a reference anymore to a (dead) term, or marks the term properly as being active.
+
+\subsubsection{\Acsh{PMC}'s extended back-end}
+
+We added two \ix{annotations} to \acix{PMC} that make executing \lcalc-programs more efficiently.
+The implementation of the \annix{entry_w}--\annix{exit_w} pair in the \subacix{PMC}{back-end} of \ac{PMC} is identical to \ann{entry_x}--\ann{exit_x} pair, except that locking does not have to be done.
+Therefore, all accesses to \lterms are done in an \ix{atomic-free} manner.
+
+Regarding \annix{FENCE}, hardware that supports \acl{SC}, already complies with the requirements of \ann{FENCE}.
+For \ix{software cache coherency}, as is used in \Starburst*, it will flush the corresponding cache lines, followed by a normal fence.
+As \Starburst uses in-order processors and interconnects, cache flushes and posted writes will arrive at the memory in the same order as they are issued.
+In a distributed system, \ac{PMC}'s back-end has to take into account that later writes should not overtake earlier ones, which can be the case when an out-of-order \ac{NoC} is used, or data is written to multiple memories with different write latencies.
+
+The next section will present experimental results based on two systems with a different \ix{memory hierarchy}, and therefore a different back-end for the memory model annotations.
+
+%Although a strict memory model satisfies these requirements, it might be beneficial to use a weaker model to allow the non-determinism as discussed above.
+%Moreover, the same argument applies to hardware cache coherency; caches are always kept coherent, which incurs more work---and potentially even more problematic in future technologies, also more power---than strictly necessary.
+%The next section presents experiments with systems with different memory architectures.
+
+
+\section{Experiments}
+\label{s:concurrency:experiments}
+
+We tested \ourfp* on two architectures.
+The first architecture is a hyperthreaded 12-core Intel Xeon system, which contains in this case 24~logical cores in total, and runs Linux.
+On this system, the scalability of our atomic-free execution and \ix{Haskell} is tested.
+The second architecture is \Starburst* with 32~cores and \Warpfield.
+Note that \Starburst does not have atomic \acix{RMW} operations, and uses software cache coherency.
+%Therefore, the rules and implementation is used, as discussed in the previous section.
+
+The workload for the tests is delivered by applications from the parallel section of the Haskell \NoFib* Benchmark Suite~\cite{nofib} (see also \cref{s:nofib}).
+We implemented five of them in \ourfp, namely \theapp*{coins}, \theapp*{parfib}, \theapp*{partak}, \theapp*{prsa}, and \theapp*{queens}, and will compare them to the Haskell versions in the experiments.
+
+\subsection{Scalability and speedup}
+
+All Haskell applications are compiled with \acix{GHC}~7.4.2 for the Intel platform.
+Our functional language runs on both the Intel and the \Starburst platform.
+During the experiment, the \ix{speedup} of the applications is measured, depending on the number of cores used.
+\Vref{fig:concurrency:speedup} shows the results for all applications and platforms, which is the average of five runs with a standard deviation of the execution time that is below \SI{6}{\percent}.
+
+\begin{figure}%
+\inputfig{figures/conc_scaling}%
+\caption{Speedup of \NoFib parallel benchmarks}%
+\label{fig:concurrency:speedup}%
+\end{figure}
+
+In the figure, the speedup is shown, which is the multicore performance relative to the sequential run.
+So, with \SYMcorecount cores, \ie worker threads, a speedup of $m$ means that the wall-clock execution time is $m$ times less when \SYMcorecount cores are utilized in parallel, compared to the execution time on one core.
+Note the striking resemblance to \vref{fig:hardware:performance_complexity}.
+The execution of \ourfp requires about 400~instructions on average per created \lterm, including allocation, \fxbeta-reduction, and garbage collection.
+Still, the performance is about 100~times lower than that of a fully optimized Haskell implementation.
+We expect that this difference stems from the fact that \ac{GHC} generates more efficient code, but also evaluates fewer \lterms, as it is able to optimize the program at the functional level, which \thecmd{g++} is oblivious of.
+Even though the absolute performance differs, the speedup shows similar behavior on x86.
+Both the Haskell and \ourfp versions show a close-to-linear speedup for about the first ten cores\footnote{%
+	If looked very carefully, the reader might notice that having two cores for \ourfp does not improve the performance.
+	This is due to the structure of the program.
+	In the implementation, the programs build up a list.
+	Then, all but one worker concurrently compute the contents of this list, and one worker is dedicated to post-processing the list in-order, \eg, to generate output.
+	In practice, post-processing takes less time than computation, so with two workers, one worker computes, and the other waits for its result.
+}.
+After that, the execution time does not improve when using more cores.
+
+Linux's \thecmd{perf} performance counters indicate that there is a \ix{memory bottleneck}; the number of executed instructions is for every run the same---even the number of created \lterms by \ourfp is independent of the number of workers---but the number of cycles the cores stall on memory accesses increases.
+The figure also shows the speedup when artificially compensated for this effect, which is labeled `w/o bottleneck'.
+In that case, we calculated the speedup when the instructions, which are measured during the x86 runs of \ourfp, would have the same number of stall cycles as during the sequential version.
+The straight line suggests that the speedup trend of the first ten cores is continued, at least up to 24~cores.
+This shows that the applications scale properly to many cores, although with some constant overhead.
+This also suggests that the \ix{non-determinism} in these experiments does not result in performance loss by doubly calculated terms, although we cannot measure it precisely without influencing the execution.
+
+The speedup of \theapp{queens} shows a surprising trend: scaling to up to twelve cores give a superlinear speedup.
+Even more interesting is the fact that this holds for both the implementation in Haskell and \ourfp.
+Since the `w/o bottleneck' line is below the linear speedup, like for the other applications, we conclude that the memory hierarchy determines this unexpected measurement results.
+It might be the case that the amount of data or cache size plays a role, although we cannot find the exact cause.
+
+The memory bottleneck is even more prominent on \Starburst.
+The bandwidth is saturated when eight cores are used.
+However, the same trend is visible; the workload \ix[scalability]{scales} properly to more cores, and the same amount of instructions is executed, but the cores just stall longer on every memory access.
+So, from a parallel-workload point of view, our proposed approach of avoiding usage of locks and allowing data races seems to be viable.
+
+\subsection{Locality and overhead}
+
+The memory bottleneck stems from the fact that all data, both global and local, are stored in main memory.
+Caches do keep data \ix[locality]{local}, but eventually copy data to the main memory.
+In case of local terms, which are created, used, and destroyed by only one worker thread, this gives unnecessary memory traffic, and is therefore subject to future improvement.
+For every benchmark, we counted the amount of generated local function applications, local constants, and all global terms.
+The ratio of local and global data for \ourfp running on the Intel platform is listed in \vref{t:concurrency:locglobratio}.
+This table lists the measurements when using 12~cores, but the results are similar when another number of cores is used.
+The table shows that the number of local terms is orders of magnitude higher than that of the global terms.
+
+\begin{table}%
+	\pgfplotstableread[col sep=comma]{data/conc_terms.dat}\datfile%
+	\begin{minipage}{.66\linewidth}%
+		\caption{Generated terms during evaluation (\ourfp, x86, 12~cores)}%
+		\label{t:concurrency:locglobratio}%
+%		\begin{center}%
+			\pgfplotstabletypeset[
+				fixed,precision=3,
+				columns={name,app,const,glob},
+				columns/name/.style={
+					string type,
+					column name=benchmark,
+					column type=l,
+					postproc cell content/.append style={/pgfplots/table/@cell content/.add={\ttfamily}{}},
+				},
+				columns/glob/.style={
+					column name={globals$^{a}$},
+					sci,sci zerofill,sci precision=2,
+				},
+				columns/app/.style={
+					column name={\parbox{12ex}{\centering\strut local\\applications$^{a}$\strut}},
+				},
+				columns/const/.style={
+					column name={\parbox{10ex}{\centering\strut local\\constants$^{a}$\strut}},
+				},
+				every head row/.style={before row=\toprule,after row=\midrule},
+				every last row/.style={after row=\bottomrule},
+				]{\datfile}\\%
+			{\strut\mbox{}\hspace{1.5ex}\footnotesize $^{a}$ Fraction of sum of all global and local terms}%
+%		\end{center}%
+	\end{minipage}%
+\end{table}
+
+If all local terms can be kept local, traffic to main memory and the effects of the memory bottleneck will be reduced significantly.
+Although untested, a solution could involve having a (large) \aclix{SPM} for every processor, and using this memory for all new local terms, \ie the nursery of the \acix{GC}.
+\citet{anderson:private_nursery_gc} reports that \SI{99.8}{\percent} of the data does not survive that private nursery stage, so they are dead at the successive \ac{GC}.
+Additionally, the optimum size for this memory is reported to range from \SI{64}{\Kilo\byte} to \SI{9}{\mega\byte}, depending on the application.
+The \acl{SPM} can be backed by the main memory for longer-living terms.
+Such a modification to the \ac{RTS} can be done transparently to the application.
+However, testing such a setup is left as future work.
+
+Finally, the distribution of where time is spent during execution is measured.
+\Vref{fig:concurrency:phases} shows the most important states a worker can be in:
+global \ac{GC};
+local \ac{GC};
+stalling on a black hole, where another worker computes it;
+idle, because the work queue is empty; and
+running the application, which involves doing \fxbeta-reductions, and represents the \ix{utilization} of the application.
+The time is the sum of the time spent in such a phase, presented as a fraction of the combined total time of all workers.
+Only a small fraction is used for global \ac{GC}, which is expected, because the number of global terms is much smaller than local ones.
+Interesting to see is that even local \ac{GC} contributes only for \SI{3.2}{\percent} of the total execution time.
+
+\begin{figure}%
+\inputfig{figures/conc_phases}%
+\caption{Time spent during execution (\ourfp, x86, 12~cores)}%
+\label{fig:concurrency:phases}%
+\end{figure}
+
+
+\section{Conclusion}
+\label{s:concurrency:conclusion}
+
+One of the hardware design issues of a multiprocessor platform is atomic global communication between cores, such as cache coherency and synchronization.
+In this chapter, we showed that these hardware issues can be overcome at a different level.
+To this extent, we described a rather extreme example: a programming paradigm that allows an \emph{\ix{atomic-free}} implementation.
+Such an implementation does not rely on any \acl{RMW} operations or (\ix{mutex}) locks, and does not rely on ordering guarantees of a strong memory model.
+We carefully introduced \ix[data race]{data races}, even though the application keeps having a well-defined outcome.
+
+For this, we implemented \ourfp, a functional language that strictly follows the properties of \lcalc.
+Since the language is single-assignment, synchronization is simplified.
+Expressions that can be evaluated concurrently, can safely be pushed onto and popped from a work queue, without proper synchronization.
+When work is lost due to a race condition during the push, it will eventually be calculated when required.
+Moreover, because the evaluation of an expression in \lcalc always gives the same result, multiple workers might evaluate expressions concurrently, and the doubly calculated results are just garbage collected.
+
+Based on the programming paradigm, we derived ordering rules to which the memory subsystem must adhere.
+These rules can be implemented by \ac{PMC}, as defined in \cref{c:memory}.
+However, \ac{PMC} assumes that data races should be avoided, where we introduce races in this chapter.
+Therefore, two additional memory operations (and realizations) are presented: non-exclusive write access, and a stronger fence.
+The former allows writing without having a lock on the object (and therefore allowing races), where the latter forces completion of earlier writes.
+The combination of these annotations and the behavior of \lterms allows atomic-free execution on top of \ac{PMC}.
+As a result, \ourfp's \ac{RTS} can be used on top of any weak memory model that is supported by \ac{PMC}, of which software cache coherency is exemplified in the experiments.
+This shows that \keyinsight{\codesign*} of the programming, concurrency, and memory model leads to solutions that allow less complex hardware, where modifications of only one of them is insufficient.
+
+Applications written in \ourfp do not specify any annotation for the memory model; the memory model is completely removed from the programming model.
+Moreover, even concurrency is not the task of the programmer anymore.
+Although it is possible to give hints to the compiler what can be in done in parallel, and what might lead to higher performance when done sequentially, it is \emph{impossible} to make errors regarding concurrency and synchronization.
+Therefore, the \ix{concurrency model} is removed from the \ix{programming model} too.
+The overview figure of this chapter \chapfigpageref visualizes this in the \ix[programming model!overlap]{overlap}, which only covers the model of computation.
+Then, \ourfp's libraries are the \ix{glue logic} that actually realize concurrency.
+This shows that the choice of the model of computation can implicitly allow concurrency in software, where the underlying layers are able to map it onto parallel hardware.
+
+Although we have shown that an abstraction from concurrency can be made by using \lcalc, we did not show that this leads to an \emph{optimal} abstraction, in contrast to the memory model abstraction of \cref{c:memory}.
+Several aspects have to be considered.
+In contrast to fundamental minimal rules of memory operations and memory state changes, there is no such thing as a fundamental minimal or unified model for concurrency.
+Therefore, we can only show that a \codesign approach can lead to interesting solutions, but we cannot say that this particular approach is the best.
+Experiments show that the performance of \ourfp is much lower than that of Haskell.
+A large part of this performance difference stems from the fact that we implemented C++ classes for a C++ compiler, which does not have knowledge of the functional properties of the application.
+Optimizations are mostly limited to machine instruction sequences and inlining C++ code, where \ac{GHC} is able to analyze and optimize the functional program itself, before any machine instruction is emitted.
+We expect that any good concurrency abstraction model must allow analysis and optimization, such that the performance of the implementation of such a model can compete with hand-optimized code.
+A generalization of such a concurrency abstraction is left as \ix{future work}.
+

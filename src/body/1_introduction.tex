@@ -1,0 +1,277 @@
+\setaachaptext[40]{an introductory chapter about programming many-core}
+\chapter{Introduction}
+\label{c:introduction}
+
+\begin{abstract}%
+Processors incorporate more and more cores.
+With the increasing core count, it becomes harder to implement convenient features like atomic operations, ordering of all memory operations, and hardware cache coherency.
+When these features are not supported by the hardware, applications become more complex.
+This makes programming these many-core architectures hard.
+This thesis defines programming models for many-core architectures, such that current trends in processor design can be dealt with.
+Finding a good balance between choices regarding different layers of the platform is essential in order to ease programming.
+Throughout the thesis, design choices and consequences are evaluated based on a \codesign of hardware and software abstraction layers.
+\end{abstract}
+
+``The single-core era has ended, multicore processors are here to stay.
+Getting `free' computing power by just increasing the clock frequency, does not work anymore.
+So, when one processor does not get faster, just use multiple of them.''
+This has been said many times, and it is illustrated in \vref{fig:intro:cpus}.
+In 2005, both Intel and \noac{AMD} introduced a multicore processor, which marks an important transition.
+In the past, parallelism was only achieved by putting multiple processors together for specific systems like servers and supercomputers.
+Now, processors make every (consumer) system a parallel machine.
+Programmers accept the fact that they have to face programming for \ix{concurrency}.
+Although it might sound like a reasonable conclusion, `just' having multiple cores only adds \emph{raw} computing power, but does not imply that software can make use of it.
+
+\begin{figure}%
+\inputfig{figures/intro_cpus}%
+\caption{Various Intel microprocessors}%
+\label{fig:intro:cpus}%
+\end{figure}
+
+Software for a single-core system behaves in a way programmers can understand easily.
+Instructions are executed in the order that is defined, and if designed carefully, the program always gives a correct result.
+When the computer becomes faster, \eg, runs at a higher clock speed, the software will run faster.
+Many (single-core) technological enhancements, like smaller feature sizes, caches, and branch prediction, can be applied to the processor architecture and improve performance without changes to the software.
+
+In great contrast, exploiting hardware parallelism (in the form of multiple cores) by concurrent programming can only be accomplished when the software is changed.
+The program has to be split in chunks of work that can be executed in parallel.
+Based on the single-core programming principles, programming involves defining a somewhat balanced set of communicating instruction sequences.
+When a multicore computer becomes faster---which effectively means that more cores are added---a properly balanced multi-threaded program might not even benefit at all.
+More importantly, when the speed of a hardware component changes, the latency and interleaving of communication might change too and even break the program.
+Such bugs are hard to find, even harder to reproduce, and therefore almost impossible to fix properly.
+Moving from single-core to multicore is one example of an improvement to a computer system as a whole, which requires changes to multiple aspects of the design of such a system; this truly requires \emph{\codesign*} of the hardware architecture and the programming approach.
+
+Hardware and software have influenced each other for a long time.
+An example of the hardware--software interplay is the addition of threading to the latest C and C++ standards, as a response to multicore hardware.
+The introduction of vector instructions in \acl{GP} processors as a response to the increasing demand for graphics processing, is just another example.
+So, \codesign is commonly applied in processor design.
+
+Nevertheless, several trends are visible that pushes hardware complexity via the \ix{programming model} to the application.
+\citet{borkar:future} conclude that the performance of hardware can only be increased under acceptable energy demands, when software supports these changes to the hardware.
+While hardware can only respond to events that occur at this moment, software has some knowledge and control over the future, \eg, by scheduling.
+Therefore, software might be able to reduce the power usage more than hardware can do, by taking control over fine-grained dynamic power management, such as turning off cores that are not to be used soon.
+A different trend shows that the performance of memory technology scales not as fast as the performance of logic circuitry, so memory becomes a bottleneck, and the software should exploit data locality even more.
+Therefore, the memory hierarchy becomes more complex, \eg, because of multiple levels of caches, and control over this hierarchy lies in the hands of software~\cite{choi:denovo}.
+Another trend can be seen in how concurrency is handled.
+More parallelism can only be realized by a change in the programming paradigm~\cite{sutter:concurrency_revolution}.
+However, it is hard to accomplish this.
+Threading is a popular approach, but it introduces non-determinism at such a scale, that it is hard to oversee and control by a programmer~\cite{lee:problem_with_threads}.
+Additionally, threading libraries might break optimizations by a concurrency-agnostic compiler~\cite{boehm:threads_no_lib}.
+Among many other \acp{API}, \noac{OpenMP}~\cite{dagum:openmp} allows fine-grained control over parallelism, which a compiler cannot statically determine by itself, by means of annotations in the C source code.
+In all these trends, handling of low-level machine-specific details is based on analysis of, or control by, the high-level (pseudo--)machine-\emph{independent} application.
+In practice, however, the programmer has to do it by hand\ldots
+
+It is logical to expose new hardware features to the programmer first, and rely on manual control; it takes time until the feature is understood well enough to take care of it automatically.
+However, the ultimate goal is to let a tool do all the work that can be done automatically.
+In case of the aforementioned multicore trends, parallelism and the memory hierarchy are features that are hard to handle correctly by hand.
+The question is whether it can be automated or not, and what the consequences are.
+This thesis will discuss consequences of choices regarding various abstraction layers that are relevant for programming a multicore system.
+
+
+\section{Multicore and many-core}
+
+Let us first define such a `multicore' system in the context of this thesis.
+A parallel machine can be organized in many ways, such as:
+multiple cores within a processor, communicating via an on-chip bus;
+multiple processors within a computer, communicating via an off-chip bus; and
+multiple computers within a cluster, communicating via Ethernet.
+These architectures all have their benefits and drawbacks.
+
+One interesting property is the latency of communication.
+As an example, different latencies of reads within the Intel Nehalem processor are listed in \vref{t:intro:latency}~\cite{molka:memory_performance}.
+It shows that off-chip communication takes a considerable amount of time, compared to reads from memories that are closer.
+Combined with the trend of \vref{fig:intro:cpus}, the continuing exponential growth of the number of transistors per chip gives resources and a performance benefit to integrate more cores on one die.
+Hence, it is likely that the number of cores per processor will grow exponentially.
+
+\ctable[mincapwidth=.7\linewidth,label=t:intro:latency,caption={Read latency (Intel Nehalem) \cite{molka:memory_performance}}]{
+	>{\figureversion{text,prop}}lc
+	}{}{
+	\FL
+	data source						& latency (cycles)	\ML
+	local L1 cache					& 4					\NN
+	local L2 cache					& 10				\NN
+	local L3 cache					& 38				\NN
+	other core's cache (same die)	& 38--83			\NN
+	other core's cache (other die)	& 102--170			\NN
+	off-chip \acs{RAM} (same die)	& 191				\NN
+	off-chip \acs{RAM} (other die)	& 310				\LL
+}
+
+Multicore systems are often classified as \emph{many-core} to express a high core count.
+It also informally tends to stress the need for specific techniques that are related to concurrency.
+However, the exact difference between multi and many is usually not clearly defined.
+We use the following definition:
+
+\begin{describe}{multicore}
+	A \ac{SMP} architecture containing tightly coupled identical superscalar cores, under control of a single \ac{OS}.
+	The cores are tightly coupled in the sense that they (usually) share all memory, and the caches are hardware cache coherent.
+\end{describe}
+
+\begin{describe}{many-core}
+	A processor architecture that contains at least tens of loosely coupled (possibly heterogeneous) simpler cores.
+	The cores are loosely coupled in the sense that the memory is characterized as a \ac{NUMA}, they (usually) have incoherent caches, and every core runs its own (instance of an) \ac{OS}.
+\end{describe}
+
+Most commercially available processors can be described as multicores.
+The \IntelSCC and \XeonPhi can be classified as many-cores, even though the latter has hardware cache coherency.
+As the core count increases, hardware cache coherency is unlikely to sustain~\cite{choi:denovo}, which will probably make most future processors many-cores.
+
+This thesis focuses on programming a single many-core processor.
+From a software perspective, this conceptually does not differ much from a multiprocessor setup.
+Therefore, we use the terms `core' and `processor' as synonyms, despite their physical differences.
+
+
+\section{Abstraction}
+
+\ctable[label=t:intro:abstraction,caption={Abstraction layers}]{l>{\figureversion{text,prop}}l}{}{
+\FL model								& examples \ML
+	programming language				& C, Haskell \NN
+	\ldots								& \NN
+	logical processors					& context switching by \acs{OS} \NN
+	instruction set						& \xSixtyFour, Thumb-2 \NN
+	processor							& Phenom~\Rmnum{2}, \MicroBlaze \NN
+	core								& \noac{IA-32}, hyperthreading \NN
+	components							& \acs{RAM}, \acs{ALU} \NN
+	standard cells						& and-gate, \acl{FF} \NN
+	circuit logic						& \acs{CMOS} \NN
+	semiconductor						& GaAs \NN
+	atoms								& Si, O \NN
+	Standard Model of particle physics	& up quark, muon neutrino \LL
+}
+
+Making abstractions, as we just did, is very important in programming.
+A computer consists of many \ix[abstraction layer]{abstraction layers}, which hide details about the implementation.
+\Vref{t:intro:abstraction} lists several layers of abstraction within a processor.
+All these layers are replaceable, without having to redefine all other layers, except for the surrounding onces.
+For example, when \ac{CMOS} technology is replaced, the standard cells have to be redesigned, but the processor architecture is (largely) independent of it.
+
+An abstraction generalizes the implementation of it.
+As such, conclusions drawn, based on the abstraction, should be valid for every implementation.
+In the examples of \vref{t:intro:abstraction}, two different types of abstraction can be observed: the abstraction contains either \emph{fewer} or \emph{more} details than its implementation.
+The abstraction of \ac{CMOS} technology to standard cells hides all details about feature size and thickness of the metal layers.
+Such an abstraction layer has to fill in the missing details, which usually comes at a cost or overhead---rectangular shaped standard cells do not necessarily use the least amount of chip area.
+In contrast, the \xSixtyFour is a \ac{CISC} instruction set, where processors translate it to a \ac{RISC} set of simpler micro-operations.
+So, \ac{CISC} instructions carry more information than what is required by the processor; the implementation of the abstraction layer can make optimal choices, based on the abundant information.
+
+The programming language at the top of the list does not fit in this definition of an abstraction.
+It partly hides details, such as details of the assembly language of the specific target processor.
+However, it exposes issues like concurrency and inter-thread communication.
+For example in C, concurrency is something that has to be done by the programmer.
+Most importantly, different programming languages hide and expose different aspects.
+For portability reasons, a proper programming model is required.
+
+The (software-related) abstraction layers at the top of \vref{t:intro:abstraction} are not as clearly delimited as those at the bottom.
+The question is whether proper layers can be defined, and in what way implementation details can be hidden from the programmer.
+In this thesis, we discuss the abstraction layers that are relevant from a programming perspective, and how these abstractions influence each other.
+A good programming model is designed such that it allows utilizing the raw computing power of a many-core architecture, with a high level of abstraction.
+
+
+\section{Embedded systems}
+
+If utilizing all computer power, \ie performance, is not relevant, programming a multicore system is rather straightforward; use one core, and leave all the others idle.
+For a desktop \noac{PC}, this might be acceptable in some cases.
+However, within the \ix[embedded systems]{embedded} domain, resources are more precious or performance requirements stricter.
+Embedded system processors follow the same trends as \vref{fig:intro:cpus} illustrates for desktop and server systems.
+The same technology is used, but there is a time offset of several years in which the technology becomes mature, more energy efficient, and feasible to be used in battery-powered devices.
+For example, where the first iPhone in 2007 uses a single-core \noac{ARM} processor, the first quad-core smartphones appeared in 2012.
+
+Moreover, embedded systems are often used in a context where time-critical interaction with the environment is required.
+Examples include video decoding with a constant frame rate, and control of a car or airplane.
+In this sense, embedded systems are pushed to their limits, which makes investments in new techniques worthwhile, which in turn can also be applied in general-purpose computing at a later stage.
+The combination of limited resources and performance requirements in an embedded system makes the multicore programming challenge even more interesting.
+The techniques presented in this thesis are therefore tailored towards embedded systems, but might also be applicable in other systems.
+
+
+\section{Problem statement and approach}
+\label{s:intro:problem}
+
+As discussed above, processors become increasingly parallel.
+In an embedded context, it is important to maximize the performance and therefore to utilize all available cores.
+However, in many-core architectures, concessions to programmability are made by changing several aspects of the architecture in favor of hardware scalability, production costs, reduced design complexity, or energy efficiency.
+These changes to the hardware are reflected in the \ix{programming model}, and are currently exposed to the programmer.
+The central \ix[problem statement]{problem} this thesis addresses is:
+\chapdef\theproblem{How can we cope with the hardware trends in embedded many-core architectures, from a programming perspective?}%
+\begin{emphasize}
+	\theproblem
+\end{emphasize}
+
+The approach is to define \emph{programming models} in a way that the complexity of the trends mentioned above is hidden from the programmer.
+Then, the compiler and a \acl{RTS} should have all information to handle low-level details automatically, efficiently, and correctly.
+We limit ourselves to the following aspects.
+
+At the hardware-architectural level, a \ac{NoC} with a mesh topology is often advocated as a scalable interconnection infrastructure.
+However, such an interconnect requires routing through the mesh.
+To guarantee bandwidth between two cores or to memory, the communication pattern of the application is required to determine the allocation of buffers and network links.
+Such a communication pattern is assumed to be pseudo-static---it is static during a specific phase of the program, but changes over the phases.
+However, the preferred programming approach, C and threads, does not match the requirement that the communication pattern has to be known on beforehand.
+Additionally, as the latency in number of clock cycles increases at an increasing core count, atomic operations like a compare-and-swap are hard to realize.
+When these operations are absent or more expensive, it influences the choices a programmer might make about concurrency.
+We investigate the \emph{\ix{interconnect}}, guarantees about inter-core communication, and \emph{\ix{synchronization}} protocols, and we propose a new interconnect that better suits the needs.
+
+As a \acix{NUMA} architecture is used, \eg, by using \aclp{SPM}, the performance is influenced by the location where application data is stored.
+Moreover, as processors and memories are distributed, a total ordering of operations on them cannot be guaranteed.
+This makes it harder to reason about the behavior of the memory and therefore the system state.
+Additionally, hardware cache coherency becomes notoriously complex at high core counts, but incoherent caches make the memory behavior even harder to understand.
+We define a \emph{\ix[memory (consistency) model]{memory model}} that is able to hide handling caches and \aclp{SPM}, and allows easily porting applications to other memory architectures.
+
+The actual number of cores is usually not known at compile time.
+Therefore, the application has to be suitable to be run on any number of cores.
+This has a major impact on how an application should be designed and written.
+Defining \emph{\ix{concurrency}} in an application by hand is error-prone.
+We discuss a scalable programming approach to do this automatically.
+
+Every layer of abstraction has influence on the surrounding layers.
+More importantly, choices regarding a lower level have an impact on programming.
+Therefore, we evaluate all decisions in a \emph{\codesign*} approach, such that the overall programming efficiency is improved.
+
+
+\section{Contributions}
+
+\index{contributions}
+The central concept of this thesis is the definition of a programming model with respect to the hardware--software platform.
+A \ix{platform} contains a hardware architecture, and implements a memory model and a concurrency model.
+On top of that, a model of computation is combined with a programming paradigm in a programming model.
+The programming model exposes specific details of the underlying models, but hides others.
+We define a layered overview of a \ix{programming model}, which allows characterization of programming languages, based on what information a programming should give to guide a proper implementation.
+
+We propose a \ix[tree]{tree-shaped interconnect} with a \ix{ring} for core-to-memory and core-to-core communication, respectively.
+The interconnect uses a work-conserving distributed \acl{FCFS} arbitration scheme, and gives bandwidth guarantees.
+The hardware costs are low and scale linearly to the number of cores.
+
+As atomic \acl{RMW} operations are hard to realize in a many-core architecture, synchronization is usually based on polling background memory, which is expensive in terms of bandwidth.
+We present a \ix{distributed lock} algorithm, which benefits from the local memories and bypasses the background memory.
+
+Cache coherency, \aclp{SPM}, and \acl{DSM} are generalized in our proposed \acix{PMC} model.
+This model allows abstracting from any memory architecture, while retaining the essential memory operation orderings that are required for programming.
+We show an implementation to several memory architectures, including software cache coherency, which is transparently applied to standard benchmark applications.
+
+Finally, we present an implementation of a functional language, which utilizes the full parallel capacity of a many-core system.
+Most interestingly, the implementation is \emph{\ix{atomic-free}}; no locks, atomic \acl{RMW} operations, or strong memory model is required.
+This property allows a further increase of the number of cores, while locality can be exploited transparently.
+
+All experiments are conducted on \Starburst*, our many-core system on \acix{FPGA}, using standard benchmark applications.
+The system reflects the current trends in many-core architectures.
+This allows evaluation of all aforementioned aspects in a realistic environment.
+
+
+\section{Structure}
+
+This thesis is organized as depicted by the figure \vpageref[above]{cfig:thesis}.
+The layered view of a many-core platform with the programming model form the core of the thesis.
+
+\Cref{c:starburst} discusses trends in many-core architectures and applications.
+Based on the observed trends, we designed and implemented our experimental platform \Starburst.
+The parallel benchmarks applications from the \SPLASH and \NoFib are discussed, which we use throughout the thesis for evaluation.
+
+In \cref{c:progmodel}, all layers in the figure are discussed in more detail.
+The programming model is defined, in terms of the underlying models.
+To make programming easier, the programming model should hide as many details from the other layers as possible.
+To this extent, specific optimizations in the remaining layers are discussed in \cref{c:hardware,c:memory,c:concurrency} in a bottom-up fashion.
+
+\Cref{c:hardware} discusses the communication infrastructure and synchronization.
+The tree-shaped interconnect is presented, in combination with core-to-core communication that is required for the distributed lock algorithm.
+\Cref{c:memory} presents the \ac{PMC} model and an approach to annotate existing applications in order to be portable to any memory architecture.
+\Cref{c:concurrency} presents a method that hides concurrency from the programmer, but still allows utilizing all cores.
+
+Finally, \cref{c:conclusion} concludes the thesis, formulates the contributions in more detail, and presents recommendations for future work.
+

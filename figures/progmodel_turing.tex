@@ -1,0 +1,62 @@
+% Turing operation: write, move, next state
+\newcommand{\Top}[3]{%
+	#1\ifstrequal{#2}{R}{%
+	\tikz[baseline=0]{\draw[->] (0,.66ex) -- ++(2ex,0);}}{%
+	\tikz[baseline=0]{\draw[<-] (0,.66ex) -- ++(2ex,0);}}%
+	#3}%
+\hfill\subbottom[Add algorithm]{%
+	\begin{minipage}[b]{.4\linewidth}
+	\hfil\begin{tabular}[b]{ccc}
+	\toprule
+			& \multicolumn{2}{c}{tape input}		\\
+	state	& 0					& 1					\\ \midrule
+	A		& \Top{1}{R}{B}		& \Top{1}{R}{A}		\\
+	B		& \Top{0}{L}{C}		& \Top{1}{R}{B}		\\
+	C		& \Top{0}{R}{HALT}	& \Top{0}{R}{HALT}	\\ \bottomrule
+	\end{tabular}\hfil \\
+	\footnotesize\figureversion{lining,prop}\Top{1}{R}{B} means: write 1, move head to right, go to state B%
+	\end{minipage}%
+}\hfill\hfill%
+\subbottom[Execution steps to add 2 and 3]{%
+	\begin{tikzpicture}[
+		bit/.style={draw,minimum size=\portablefigunit,inner sep=0,outer sep=0,fontB,execute at end node={\gdef\Tbitstyle{}}},
+		head/.style={bit,fill=black!15,alias=last head,execute at end node={\gdef\Tbitstyle{\itshape}}},
+		first bit/.style={bit,draw=none,minimum width=0,name=last bit,alias=last sequence,outer ysep=.2ex},
+		bit A/.style={head},
+		bit B/.style={head},
+		bit C/.style={head},
+		bit H/.style={head},
+		bit ./.style={draw=none},
+	]
+	\def\strut{}%\rule[0pt]{0pt}{.8\portablefigunit}}
+	\def\Tgobble#1{}
+	\def\Tbitnode#1{\node[bit,bit #1/.try,anchor=west,at=(last bit.east)] (last bit) {\strut\ifstrequal{#1}{.}{}{\Tbitstyle#1}};\Tbit}
+	\def\Tbit#1{\ifx\relax#1\let\Tbitnode\Tgobble\fi\Tbitnode#1}
+	\def\Tstep#1;{
+		\node[first bit,anchor=north,at=(last sequence.south)] {\strut};
+		{\Tbit#1\relax}
+	}
+	\gdef\Tbitstyle{}
+	\node[first bit,anchor=south] at (0,0) {\strut};
+%
+	\Tstep ......A1101110;
+	\draw[<-,shorten >=1pt] (last head.north) -- +(.5,1em) node[anchor=south,plain label,outer sep=-1pt] (head label) {head: state and next input};
+	\draw[->,shorten <=1pt] (head label.south) -- +(.5,-1em);
+	\Tstep .....1A101110;
+	\Tstep ....11A01110;
+	\Tstep ...111B1110;
+	\Tstep ..1111B110;
+	\Tstep .11111B10;
+	\Tstep 111111B0;
+	\Tstep .11111C10;
+	\Tstep 111110H0;
+%
+	\coordinate (bb north west) at (current bounding box.north west);
+	\coordinate (bb south west) at (current bounding box.south west);
+	\coordinate (bb south east) at (current bounding box.south east);
+	\draw[->,semithick] let \p1=($(bb north west)+(-1ex,0)$), \p2=($(bb south west)+(-1ex,0)$) in
+		(\x1,0) -- (\p2) node[plain label,midway,anchor=south,outer sep=.5ex,rotate=90] {execution};
+	\draw[<->,semithick] let \p1=($(bb south west)+(0,-1ex)$), \p2=($(bb south east)+(0,-1ex)$) in
+		(\p1) -- (\p2) node[plain label,midway,anchor=north,outer sep=.5ex] {tape};
+	\end{tikzpicture}%
+}\hfill\null%

@@ -1,0 +1,100 @@
+\chapter*{Color Tests}
+\pdfbookmark{Color Tests}{colortests}
+
+\centering
+
+\begin{portablefig}
+
+\def\definerainbow{
+	\pgfdeclareverticalshading{rainbow}{100bp}
+	{color(0bp)=(red); color(25bp)=(red); color(35bp)=(yellow);
+	color(45bp)=(green); color(55bp)=(cyan); color(65bp)=(blue);
+	color(75bp)=(violet); color(100bp)=(violet)}
+}
+
+\begin{tikzpicture}
+\fill[left color=white,right color=black] (0,0) rectangle +(.9\linewidth,-.9cm);
+\fixboundingbox
+\foreach \x in {0,0.25,...,1} \node[anchor=south] at (\x*.9\linewidth,0) {\strut\x};
+\end{tikzpicture}
+\begin{tikzpicture}
+\definerainbow
+\shade[shading=rainbow,shading angle=270] (0,0) rectangle +(.9\linewidth,.9cm);
+\end{tikzpicture}
+\begin{tikzpicture}
+\selectcolormodel{gray}
+\definerainbow
+\shade[shading=rainbow,shading angle=270] (0,0) rectangle +(.9\linewidth,.9cm);
+\end{tikzpicture}
+
+\def\testchart{
+	\begin{axis}[
+		grid=both,
+		axis equal image=true,
+		xmin=0,
+		xmax=5,
+		ymin=0,
+		ymax=5,
+		enlargelimits=false,
+		legend style={pos=south east},
+		width=5cm,
+		height=5cm,
+		scale only axis=true,
+		every axis plot/.append style={domain=0:5},
+	]
+	\addplot function {x*x};
+	\addplot function {x*x/3};
+	\addplot function {x*x/6};
+	\addplot function {x*x/9};
+	\addplot function {x*x/14};
+	\end{axis}
+}
+
+\begin{tikzpicture}
+\testchart
+\end{tikzpicture}\hfill%
+\begin{tikzpicture}
+\selectcolormodel{gray}
+\testchart
+\end{tikzpicture}
+
+\def\testarea{
+	\begin{scope}[x=.35\linewidth,y=.35\linewidth]
+		\calcxyunits
+		\node[circle,minimum size=\xunit,outer sep=0] (c) {};
+		\path[bar color 1,fill,draw=black] (c.center) -- (c.0) arc(0:40:.5\xunit) -- cycle;
+		\path[bar color 2,fill,draw=black] (c.center) -- (c.40) arc(40:95:.5\xunit) -- cycle;
+		\path[bar color 3,fill,draw=black] (c.center) -- (c.95) arc(95:170:.5\xunit) -- cycle;
+		\path[bar color 4,fill,draw=black] (c.center) -- (c.170) arc(170:250:.5\xunit) -- cycle;
+		\path[bar color 5,fill,draw=black] (c.center) -- (c.250) arc(250:360:.5\xunit) -- cycle;
+	\end{scope}
+}
+
+\begin{tikzpicture}
+\testarea
+\end{tikzpicture}\hfill%
+\begin{tikzpicture}
+\selectcolormodel{gray}
+\testarea
+\end{tikzpicture}
+
+\def\testnice{
+	\node[black,fill,minimum width=.3\linewidth,minimum height=.5cm] (black) at (0,0) {};
+	\node[black,anchor=mid west] at (black.east) {black};
+	\node[niceblack,fill,minimum width=.3\linewidth,minimum height=.5cm] (nblack) at (0,-.5cm) {};
+	\node[niceblack,anchor=mid west] at (nblack.east) {niceblack};
+	\node[nicegray,fill,minimum width=.3\linewidth,minimum height=.5cm] (ngray) at (0,-1cm) {};
+	\node[nicegray,anchor=mid west] at (ngray.east) {nicegray};
+	\node[niceblue,fill,minimum width=.3\linewidth,minimum height=.5cm] (nblue) at (0,-1.5cm) {};
+	\node[niceblue,anchor=mid west] at (nblue.east) {niceblue};
+}
+
+\begin{tikzpicture}
+\testnice
+\end{tikzpicture}\hfill%
+\begin{tikzpicture}
+\selectcolormodel{gray}
+\testnice
+\end{tikzpicture}
+
+\end{portablefig}\clearpage%

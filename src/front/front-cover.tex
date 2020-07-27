@@ -1,0 +1,39 @@
+\thispagestyle{empty}%
+\pdfbookmark{Front cover}{frontcover}
+\ifdigital
+	\begin{tikzpicture}[overlay,remember picture]
+	\node[anchor=center,inner sep=0,outer sep=0] at ($(current page.center)+(\trimedge,\trimtop)$)
+		{\includegraphics[width=1.01\paperwidth]{src/cover/cover-front.pdf}};
+	\end{tikzpicture}
+\else
+	\begin{tikzpicture}[
+		overlay,remember picture,
+		every node/.style={inner sep=0,outer sep=0,minimum width=\paperwidth,anchor=center},
+	]
+		\coordinate (top) at ($(current page.north)+(\trimedge,\trimtop)$);
+		\coordinate (bot) at ($(top)+(0,-\paperheight)$);
+%		\draw ($(current page.north west)+(\trimedge,\trimtop)$) rectangle +(\paperwidth,-\paperheight);
+%		\draw (top) -- (bot);
+
+		\def\goldennode[#1] <#2-#3> (#4) #5;{
+			\path let \n1={1/\golden} in ($(#3)!\n1!(#2)$) node[name=#4,#1] {\parbox[c]{\linewidth}{\strut\Centering#5\strut}};}
+        
+		\sffamily\figureversion{text,prop}\nohyphenation
+		
+		\Huge
+		\goldennode[] <top-bot> (title) {%
+			\begin{Spacing}{1.2}\thetitle\end{Spacing}%
+            {\ifthenelse{\equal{\thesubtitle}{}}{}{\mbox{} \\[-1ex]\LARGE\textit{\thesubtitle}}}%
+		};
+
+		\LARGE
+		\ifabstractonly
+			\goldennode[] <title-bot> (author)	{\theauthor};
+			\normalsize
+			\goldennode[] <bot-author> (defense) {Intended date of defense:\LARGE\\[1ex]\thedate, at \thesistime};
+		\else
+			\goldennode[] <bot-title> (author) {\textcolor{black!50}{\theauthor}};
+		\fi
+		\normalsize
+	\end{tikzpicture}%
+\fi%

@@ -1,0 +1,1054 @@
+\inputonce{figures/arch_style}
+
+\begin{chapterfig}[\Cref{c:hardware}]
+\platformlayer[padded]						(app)	{\SPLASH and \PARSEC};
+\platformlayerlabel[]						<app>	{application};
+\platformlayer[model,padded]				(pm)	{\twopartlabel{}{C / C++}};
+\platformlayerlabel[]						<pm>	{programming model};
+\platformlayer[model,padded]				(moc)	{\twopartlabel{}{\acsix{RASP} machine}};
+\platformlayerlabel[]						<moc>	{model of computation};
+\platformlayerglue[padded]					()		{\twopartlabel{\thecmd{g++}}{}};
+\platformlayer[model,padded]				(cm)	{\twopartlabel{}{Pthread}};
+\platformlayerlabel[]						<cm>	{concurrency model};
+\platformlayerglue[padded]					()		{\twopartlabel{\centering\Helix, \textbf{distributed lock}}{\acs{POSIX}}};
+\platformlayer[model,padded]				(mm)	{\twopartlabel{}{weak}};
+\platformlayerlabel[]						<mm>	{memory model};
+\platformlayer[padded,minimum height=3.5em]	(hw)	{\centering\MicroBlaze, \textbf{\aethereal}, and \textbf{\Warpfield}};
+\platformlayerlabel[]						<hw>	{hardware};
+\rightflappadded[]							<pm-mm>;
+\crosslayerright[] <moc.north east->		()		{\Starburst};
+\crosslayerleft[] <app.north west-mm.west>	() 		{software layers};
+\crosslayerleft[] <mm.west->				() 		{hardware};
+\end{chapterfig}
+
+
+\setaachaptext[50]{chapter proposing to de-mesh \acsp*{NoC}}
+\chapter{Efficient Hardware Infrastructure}
+\label{c:hardware}
+\nofootnote{Large parts of this chapter have been published in \selfcite{rutgers:distlock,rutgers:noc}.}
+
+\begin{abstract}%
+Experiments with threaded C applications in a many-core context show two issues: communication and synchronization costs.
+As bandwidth to memory is limited, core-to-core communication is favored.
+In a many-core setup, a connection-oriented \ac{NoC} is often recommended.
+However, such a \ac{NoC} uses hardware resources per connection, which is quadratic in the number of cores.
+This chapter presents the \Warpfield \ac{NoC}, which scales linearly and improves application performance, as it is work-conserving, but has a higher worst-case latency bound.
+Moreover, a distributed lock algorithm is proposed to implement mutexes without polling memory.
+For the given programming model, the resulting system scales close to linear in terms of performance.
+\end{abstract}
+
+In \cref{c:introduction}, we have seen that future embedded processors are likely to be many-core systems.
+Existing commercial processors all try to scale the number of cores, but maintain the threaded C programming model on top of a shared-memory architecture as much as possible, which is discussed in \cref{s:trends:progmodel}.
+Moreover, these many-core systems have in common that the memory bandwidth per core is reduced, which increases the importance of locality.
+Therefore, expensive off-chip memory communication is avoided by using distributed and non-uniform memory, such as caches and \acp{SPM}, and direct core-to-core communication is preferred.
+
+Because a traditional bus is unsuitable as infrastructure for such a many-core architecture, \acpix{NoC} have been developed.
+Among other properties, a \ac{NoC} can be classified as \emph{\ix{connection-oriented}} or \emph{connectionless}~\cite{meister:connection,bjerregaard:noc_survey}.
+The former defines that the \ac{NoC}'s hardware has knowledge of a connection between two communicating entities, like two processes or a process and a memory.
+As such, the hardware allocates resources, such as buffer space and bandwidth capacity, for a specific channel.
+A typical example is a circuit-switched network.
+A \ix{connectionless} network does not know about connections, and transfers data in chunks as being issued to the network.
+Packet-switched networks---without virtual channels---are typically connectionless.
+When the network hardware is connectionless, a connection-oriented protocol can still be used on top of it.
+At a different scale, using \noac{TCP} over \noac{IP} in a \noac{LAN} is one example of that.
+
+To give real-time guarantees, the use of a connection-oriented \acl{GS} \ac{NoC} is proposed~\cite{bjerregaard:noc_survey,demicheli:noc_research,goossens:aethereal,wolkotte:phd}.
+This allows performance analysis of applications in isolation, because communication of one application can only have a bounded influence on other running applications.
+However, for shared memory, a connection-oriented \ac{NoC} requires connections between every core and (local) memory.
+This is expensive because a hardware cost is associated with every connection.
+A connectionless \ac{NoC} is less expensive, but the performance per connection is uncertain.
+
+An additional effect of a connection-oriented \ac{NoC} is that (\ac{FIFO}) channels impose a specific form of synchronization: one-to-one, where both participants of the synchronization are known upfront.
+This is in contrast to conventional usage of mutexes, of which it is unknown which thread is going to lock it next.
+A (distributed) implementation of a mutex on top of a \ac{NoC} architecture is not trivial.
+
+This chapter will discuss two \ix[trade-off]{trade-offs} in the implementation of \ix{many-core} hardware, and \Starburst* specifically, given the threaded C programming model: the architecture of the \ix{interconnect}; and the realization of \ix{synchronization} on top of this interconnect.
+Both trade-offs are fully transparent to the application, because they exist outside of the programming model.
+The overview figure of this chapter \chapfigpageref depicts this in some more detail: we use \SPLASH and \PARSEC applications written in C using Pthreads, on top of a \ac{POSIX}-like \ac{OS} and a weak memory model.
+
+On the interconnect side, \aethereal is replaced by our \Warpfield interconnect.
+Experimental evidence is provided that confirms that substitution of a connection-oriented \ac{NoC} by a connectionless one in a real-time \ac{DSM} system reduces hardware costs significantly.
+Furthermore, it improves the processor utilization, but \emph{does} compromise the analytically computed worst-case behavior.
+However, an increase in the uncertainty introduced by the connectionless interconnect is \emph{not} confirmed by the experimental results.
+
+One generic usage of core-to-core communication is synchronization.
+Synchronization is commonly implemented using atomic \ac{RMW} operations, which poll main memory.
+As this is a scarce resource, and \cref{c:trends} shows the trend that architectures shift away from atomicity in memory operations, such a polling-based method should be avoided.
+To bypass shared memory, we propose an efficient distributed lock algorithm that implements the Pthread mutex.
+We show that using a low-cost inter-processor communication ring for synchronization reduces the required \ac{SDRAM} memory bandwidth.
+Additionally, the distributed lock reduces the average latency of locking, by exploiting the locality of mutexes.
+As a result, the throughput and execution time of applications improve.
+
+%We designed and built such a system with a connection-oriented \ac{NoC}, tailored to streaming applications.
+%It turned out that the size of a Virtex-6 LX240-T \ac{FPGA} only allowed having 8 MicroBlaze cores.
+%We replaced the connection-oriented \ac{NoC} by a tree-shaped, connectionless network and a ring.
+%The new interconnect is smaller, and as a result, the same \ac{FPGA} can contain 32 cores.
+%Additionally, measurements show improved performance.
+%Although the analytically calculated worst-case behavior is slightly worsened, it is bounded.
+%This makes the use of a connectionless \ac{NoC} viable.
+
+
+\section{Communication patterns and topology}
+\label{s:hardware:topology}
+
+Before we discuss the experimental setup in the next section, we first look more closely to the requirements that applications impose on the \ix{interconnect}.
+Current systems allow chaotic and undisciplined use of shared memory~\cite{adve:rethinking}, and threaded programs make use of this property.
+Naively, threading therefore requires the hardware to implement all-to-all communication between the cores.
+On the other extreme, streaming applications, like multimedia applications, can often be described in a \ac{KPN} model.
+In contrast to threads, such a model clearly defines the communication pattern of the application.
+Because such a \ac{KPN} is static for a significant amount of running time of the application, the hardware (or \ac{NoC} configuration) can be tailored toward this pattern.
+However, fixating the \ac{NoC} \ix{topology} for only one application is not feasible for a general-purpose platform.
+We differentiate the following general types of communication streams for a typical \ac{DSM} architecture:\index{memory traffic}
+\begin{enumerate}
+\item \emph{\ix[memory-to-core communication]{Memory-to-core} for instructions:}\label{i:communication:instr}
+	Since all cores run code from main memory, the instruction cache must be filled regularly.
+\item \emph{\ix[core-to-memory communication]{Core-to-memory} and memory-to-core for local data:}\label{i:communication:local}
+	All data that is local to a core, such as kernel data, (most of the) process stack, and specific data on the heap, can safely be cached.
+	The data cache has to flush and fill cache lines regularly.
+\item \emph{Core-to-memory for shared data:}\label{i:communication:shared_write}
+	In a shared-memory setup, the main memory is used to communicate data between cores.
+	Writing shared data to memory effectively means that this data is to be sent to another core.
+	This data can be cached, but requires a coherency protocol then to give guarantees how these writes are observed.
+\item \emph{Memory-to-core for shared data:}\label{i:communication:shared_read}
+	As being the counterpart of the core-to-memory stream, shared data that is sent to a specific core, is read by that core.
+\item \emph{Core-to-memory for \ix{synchronization}:}\label{i:communication:sync_write}
+	Similar to writing shared data, writes regarding synchronization are intended to be sent to another core.
+\item \emph{Memory-to-core for synchronization:}\label{i:communication:sync_read}
+	For synchronization in a shared-mem\-ory system, synchronization data structures in main memory are polled.
+\item \emph{\ix[core-to-core communication]{Core-to-core} for shared data:}\label{i:communication:direct}
+	Shared data that is written into other core's \acix{SPM} directly.
+	This bypasses main memory.
+\item \emph{Core-to-core for synchronization:}\label{i:communication:direct_sync}
+	Synchronization data structures are small, because they do not hold data itself, except for the internal state.
+	Therefore, they can also be implemented over the \acp{SPM}.
+\end{enumerate}
+
+Of these types of communication streams, an increased read latency for streams~\ref{i:communication:instr} and~\ref{i:communication:local} directly has impact on the performance of the application.
+During a cache miss of either the instruction or data cache, the core stalls until the required data is fetched from background memory.
+As every memory model prescribes that writes should be visible to the executing process immediately (see also \cref{s:memory:related}), an increased latency of the writes of stream~\ref{i:communication:local} impact the performance too, because a successive read has to stall on it.
+Therefore, these streams are considered to be \emph{\ix{latency-critical}}.
+In fact, every read from main memory is latency-critical, so streams~\ref{i:communication:shared_read} and~\ref{i:communication:sync_read} are classified similarly.
+
+Streams~\ref{i:communication:direct} and~\ref{i:communication:direct_sync} can affect the performance of the application, when the receiving process must wait for its data.
+Usually, the performance of any process is not precisely known.
+For applications without a strict feedback loop, an approach to tolerate differences in data production rates is to apply buffers in the channels between processes.
+These buffers can contain \ix{posted writes}, and allow pipeline concurrency, which might improve the throughput.
+Since an (incidentally) increased latency in these channels is compensated by buffers, these streams are \emph{\ix{latency-tolerant}}.
+Similar to the core-to-core streams, the streams~\ref{i:communication:shared_write} and~\ref{i:communication:sync_write} are latency-tolerant.
+Because accesses to main memory should be avoided, as this is a scarce resource, these streams should be avoided in favor of the core-to-core alternatives.
+
+Two different types of interconnects are required to accommodate the different types of streams above: a many-to-one latency-critical core-to-memory-to-core interconnect, and a many-to-many latency-tolerant core-to-core interconnect.
+The hardware topology must always allow core-to-memory-to-core communication, because this channel is required to execute programs.
+The core-to-core hardware topology is more flexible, because it is unlikely that all cores communicate to all cores simultaneously.
+A practical implementation could allow that only a (configurable) subset of all cores is accessible at the same time.
+However, limiting the communication pattern of an application complicates programming; the threading model assumes that all threads and cores are always accessible, so threading does not match these limitations of the \ac{NoC}.
+
+%The characteristics of the system we target, are\todo{thesis-wide?}:
+%1) a scalable \acl{DSM}, many-core system;
+%2) streaming, \emph{firm} real-time applications, where deadline misses are highly undesirable, but not catastrophic; and
+%3) the set of applications to be run at the platform---and thus the communication pattern---is unknown at design time, so the architecture must be flexible.
+
+
+\section{Baseline: \Starburst with \AEthereal}
+\label{s:hardware:ae}
+
+We use \Starburst* with the \aethereal \acix{NoC} as a baseline.
+This section describes the system, the hardware requirements, and core utilization measurements.
+The experiments show several shortcomings, which are addressed in subsequent sections.
+
+\subsection{8-core setup}
+\label{s:hardware:ae:setup}
+
+The system is organized as a tiled architecture, where every tile contains exactly one core, as discussed in \cref{s:starburst:architecture}.
+The \aethereal*~\cite{goossens:aethereal} interconnect is a connection-oriented \ac{NoC}.
+The \ac{NoC} contains a mesh of routers.
+Every router has a routing table, which defines which input port should be connected to which output port every clock cycle, \ie every \emph{slot}.
+The router continuously and repeatedly steps through this table, which results in \ac{TDM} arbitration of incoming packets.
+Wormhole connections are allocated through the mesh by defining the routing tables, such that \acp{flit}, which are inserted in the network at a specific moment in time, are contention-free routed to their destination.
+Network interfaces are connected to the mesh.
+They contain buffers for both ends of every connection, and control when \acp{flit} are injected into the mesh.
+The combination of buffer size and \ac{TDM} table contents determines the route, bandwidth, latency, and jitter per channel.
+
+The number of routers, network interfaces, and buffers is determined at design time.
+This defines the maximum capacity of the network.
+Therefore, the better the communication pattern of the application (domain) is known, the better the network dimensions can be chosen.
+At run time, a specific configuration can be chosen, such that the configured topology matches the communication pattern of the application.
+From application's perspective, channels do not interfere and offer a point-to-point connection between master and slave, \eg, core and memory.
+
+In conformance to \cref{s:hardware:topology}, the \ac{NoC} should support concurrent channels from all cores to memory, and as many channels between tiles as possible.
+Although our \ourVirtex has enough resources to accommodate 32~\MicroBlazes*, synthesis shows that an 8-core design with a fully connected \aethereal configuration does not fit in the \acix{FPGA}.
+As a---naive and non-generic, but simple---solution, \aethereal is configured such that every \MicroBlaze can communicate with 
+	1) the main memory,
+	2) one `master' \MicroBlaze that manages startup of the other cores and application, 
+	3) one peripheral for \ac{UART} output, and 
+	4) both neighbors for (limited) core-to-core communication.
+This topology is shown in \vref{fig:hardware:ae_soc}.
+By default, \Starburst includes a tile reserved for Linux and several peripherals.
+This tile and all of its peripherals are omitted to save resources, as it is not used in the experiments.
+
+\begin{figure}%
+\inputfig{figures/hw_ae_soc}%
+\caption{\AEthereal \acs{NoC} \ix{topology} for \Starburst}%
+\label{fig:hardware:ae_soc}%
+\end{figure}
+
+\AEthereal is configured with very low bandwidth requirements to maximize configuration freedom\footnote{%
+	In fact, when realistic bandwidth requirements are set, a suitable configuration cannot be found.
+	Forcing a different internal network structure or choosing the number of input/output ports differently does not help.}, %
+and the buffer sizes per channel in the network interfaces are set to contain one burst of one cache line of the \MicroBlaze's cache, which is 32~byte.
+This configuration fits in the \ac{FPGA}, and will be used as reference design.
+
+\subsection{Synthesis results: exponential costs}
+\label{s:hardware:ae:synthesis}
+
+The \ix{synthesis} results of the 8-core reference design for a Xilinx \ourVirtex at \SI{100}{\mega\hertz} is shown in \vref{t:hardware:ae:synthesis}.
+The table shows that the master \MicroBlaze is slightly bigger than the slaves are, which is caused by additional debug and performance measuring support.
+This support does not influence the performance of the core.
+In the table, the resources required for the memory controller are included within the resources of the peripherals.
+
+\ctable[caption={\ourVirtex resource usage of system with \aethereal},label={t:hardware:ae:synthesis}]{
+	l
+	S[table-format=5.0]>{\hspace{-1.5ex}}r
+	S[table-format=5.0]>{\hspace{-1.5ex}}r
+	S[table-format=3.0]
+	}{
+		\tnote[a]{The tile includes local memories, a timer, \acs{PLB} and bridges (see \vref{fig:starburst:tile}).}%
+	}{
+	\FL								& \multicolumn{2}{c}{\hdr{\acsp{LUT}}}	& \multicolumn{2}{c}{\hdr{\acsp{FF}}}	& \hdr{\acsp{BRAM}} \ML
+	master \MicroBlaze				&  2664 &    (\SI{3.2}{\percent})		&  2239 &   (\SI{2.6}{\percent})		&     8				\NN
+	master tile\tmark[a]			&  2372 &    (\SI{2.9}{\percent}) 		&  2385 &   (\SI{2.8}{\percent}) 		&     9 			\NN
+	7$\times$ slave \MicroBlaze		&  2461 &    (\SI{3.0}{\percent}) 		&  2003 &   (\SI{2.3}{\percent}) 		&     8 			\NN
+	7$\times$ slave tile\tmark[a]	&  1184 &    (\SI{1.5}{\percent}) 		&   714 &   (\SI{0.8}{\percent}) 		&     5 			\NN
+	interconnect					& 46535 &   (\SI{57.0}{\percent}) 		& 56274 &  (\SI{65.8}{\percent}) 		&     0 			\NN
+	peripherals						&  4542 &    (\SI{5.6}{\percent}) 		&  5594 &   (\SI{6.5}{\percent}) 		&    10 			\ML
+	total							& 81628 &  (\SI{100.0}{\percent}) 		& 85511 & (\SI{100.0}{\percent}) 		&   118 			\LL
+}
+
+Still, the interconnect is the biggest part of the system.
+The \ac{NoC} contains 1.5~times more \acp{LUT} and 2.4~times more \acp{FF} than all \MicroBlaze tiles together.
+Practical reasons for that result are that \MicroBlazes are small and optimized for \acp{FPGA}, and \aethereal does not map to an \ac{FPGA} well.
+
+However, there is a more fundamental problem: every connection in a \ix{connection-oriented} \ac{NoC} has associated hardware costs.
+In case of \aethereal*, most of the area is used by buffers that are necessary to guarantee throughput.
+This corresponds to the findings of \citet{goossens:aethereal}.
+When we want to have a fully connected interconnect for all core-to-core channels, a connection-oriented network becomes expensive since a quadratic number of buffers is required.
+
+\label{s:hardware:ae:scaling_problem}
+
+The trend of scaling to many cores is demonstrated by \vref{fig:hardware:ae:scaling}.
+\begin{figure}%
+\inputfig{figures/hw_ae_scale}%
+\caption{\acs{FPGA} resource usage with a fully connected \aethereal \acs{NoC}}%
+\label{fig:hardware:ae:scaling}%
+\end{figure}%
+The figure shows synthesis results for systems with up to 16~cores and a fully connected \aethereal.
+The points in the graph indicate resource usage after synthesis of the interconnect alone, the lines indicate the (calculated) size of the cores and peripherals, as of \vref{t:hardware:ae:synthesis}.
+No bandwidth and latency requirements are applied and all settings are kept the same, except for the number of routers inside the interconnect---they had to be increased to accommodate the increasing number of links, resulting in the discontinuities.
+The precise resource utilization depends on many settings, but the trend is clear: the figure shows a superlinear growth in resources.
+In fact, when having 13~cores or more, the interconnect alone does not fit in our \ac{FPGA} anymore.
+For \ac{ASIC} synthesis, the ratio between hardware costs of the cores and network will be different, because the hardware description is mapped to other technology primitives.
+However, the trend is the same; the network will outgrow the size of the tiles when scaling to tens or hundreds of cores.
+
+Although the hardware costs are already pushing the practical limits, it is as least as important how applications perform on the hardware.
+
+\subsection{Core utilization by benchmark applications}
+
+\label{s:hardware:ae:utilization}
+
+To analyze the \ix{performance} of the platform, we ported the \SPLASH* \theapp*{radiosity}, \theapp*{raytrace}, and \theapp*{volrend} applications (see \cref{s:splash2}).
+Using the trace port of the \MicroBlaze, microarchitectural data is gathered about what the core is doing every clock cycle.
+We measured these statistics during the main, parallel application loop of each of the applications.
+It is safe to assume that all cores exhibit the same behavior, because all applications are designed such that the workload among all cores is balanced and equivalent.
+\Vref{t:hardware:ae:utilization} shows the distribution of clock cycles over the five most important states a core spends time on.
+These states are:
+\begin{itemize}
+\item \emph{execution}, which indicates that the core executes instructions in a normal fashion, and gets all instructions and data directly from the cache, but it includes stalls due to branches and register hazards;
+\item \emph{I-cache miss} labels the stalls because of instruction cache misses;
+\item \emph{read data} is the time the core stalls on uncached data reads and data cache misses;
+\item \emph{write data} captures all stalls on uncached writes and stalls due to data cache flushes; and
+\item \emph{other} includes overlapping and indecisive events, such as a simultaneous instruction and data cache miss.
+\end{itemize}
+
+\ctable[
+	caption={\MicroBlaze \ix{utilization}},
+	label={t:hardware:ae:utilization},
+	]{
+		lB{}B{}B{}
+	}{}{\FL
+	\hdrL{event}			& \hdr{\theapp{radiosity}} & \hdr{\theapp{raytrace}} & \hdr{\theapp{volrend}} \ML
+	\barlegend I-cache miss	& 13.7 & 14.0 &  6.3 \NN
+	\barlegend read data	& 58.7 & 16.7 & 14.4 \NN
+	\barlegend write data	&  0.3 &  0.5 &  0.6 \NN
+	\barlegend other		&  6.1 &  5.3 &  4.7 \NN
+	\barlegend execution	& 21.2 & 63.4 & 73.9 \LL
+}
+
+\label{s:hardware:ae:latency_problem}
+
+It turns out that even with a high instruction cache hit rate---\SI{99.1}{\percent}, \SI{99.7}{\percent}, and \SI{99.9}{\percent} for \theapp{radiosity}, \theapp{raytrace}, and \theapp{volrend}, respectively---handling the instruction cache misses takes a significant amount of time.
+The performance is limited by the high memory read latency: a read takes 77~clock cycles on average, where 15~cycles are spent in the \ix[memory controller]{\ac{SDRAM} controller} to process a read, and the rest in the \ac{NoC} to traverse it twice.
+Additionally, \vref{t:hardware:ae:utilization} shows that for \theapp{radiosity}, the stall time on data reads is high.
+This is mainly caused by data structures that are placed in uncached memory, because no cache coherency is available.
+Therefore, the network latency greatly influences the performance.
+
+Traversing the \ac{NoC} is expensive, because:
+1) one memory request packet waits for multiple \ac{TDM} slots (which are non-contiguous) in the network routers, even when the \ac{NoC} is idle; and
+2) the response also has to wait for its slots, because the arbitration of the request and response packets are unrelated, even though the memory controller has a relatively predictable average response time.
+
+\subsection{Shortcomings of connection orientation}
+\label{s:hardware:ae:problems}
+
+In a \ac{DSM} architecture that is programmed using a threaded C approach, where the communication pattern of the application is not restricted, a many-to-many (or all-to-all) network topology is required.
+A \ix{connection-oriented} network that supports this pattern, has to allocate hardware resources per channel.
+Regardless of the efficiency of the network, the hardware scales quadratic to the number of cores in the system, and therefore always becomes a dominant factor in hardware design.
+
+Moreover, the experiments show that \aethereal* does not perform well for latency-critical traffic to main memory.
+This results from the fact that the network is composable, where channels are designed not to influence each other, \ie always perform as in the worst-case scenario.
+As a result, the latency of the network is relatively high, even when other channels are idle.
+Cache misses, which generally occur at unpredictable moments, do not benefit from guaranteed-bandwidth channels.
+This also holds for accessing shared data in a shared-memory model, which C is based on; the uncertainty of the performance in execution of a threaded program is too high to justify using hardware bandwidth guarantees.
+Therefore, it is sufficient to have an interconnect that performs well on average, but allows (bounded) bandwidth interference of different channels.
+
+The interconnects of the architectures described in \cref{s:trends:noc} are mostly focused on cache coherency traffic.
+They do not give guarantees about bandwidth or latency.
+As all architectures are application agnostic, they can therefore be classified as connectionless.
+For none of the systems, the \ac{NoC}'s influence on the real-time behavior is known.
+Next, we will present an interconnect that is also connectionless, but predictable.
+
+
+\section{\Warpfield: a connectionless \acsh{NoC}}
+\label{s:hardware:warpfield}
+
+The previous section identified two problems of connection-oriented \acp{NoC}: superlinear scaling of hardware resources and high latency for memory reads.
+A \ix{connectionless} \acix{NoC} is likely to scale better than a connection-oriented \ac{NoC}, because hardware resources are used per processor instead of per connection.
+The most important reason to use a connectionless \ac{NoC} in a \acix{DSM} architecture instead, is that it naturally scales linearly to the number of processors.
+We designed \Warpfield*, which is a connectionless \ac{NoC}, and differentiates between all-to-all latency-tolerant and all-to-memory latency-critical traffic, which is similar to the separation in \vref{fig:starburst:soc}.
+
+\subsection{Bitopological architecture}
+\label{s:hardware:warpfield:setup}
+
+\Vref{fig:hardware:warpfield} depicts the implementation details of the new interconnect.
+We chose a \ix{ring} for the latency-tolerant traffic, which corresponds to the interconnect in the upper part of the figure, because of its simplicity.
+The ring is built of as many chained identical segments as there are tiles in the system.
+Every segment allows one core to access the ring.
+Every core can write a data word to an address that matches a local memory of any tile.
+This address--data pair is put in a small \ac{FIFO}, awaiting injection into the ring.
+Packets already on the ring have priority over those that are waiting in the \ac{FIFO}.
+Because the local memories in the tile always accept packets, and the ring itself does not block, it is sufficient to have one set of registers that connects two segments.
+So, a packet traversing the ring hops one tile per clock cycle towards its destination.
+
+\begin{figure}%
+\inputfig{figures/hw_wf}%
+\caption{Structure of a system with \Warpfield*}%
+\label{fig:hardware:warpfield}%
+\end{figure}
+
+There is no traffic shaping for the ring; so if, for example, core~1 writes every clock cycle to core~0, no other cores would be able to access the ring anymore\footnote{%
+	\citet{dekens:ring} extended the ring such that it does give per-processor bandwidth guarantees.}.
+However, in practice, this is not a limitation; in contrast to hardware accelerators, \MicroBlazes are not fast enough to generate, send and receive data at such high rates.
+Moreover, our benchmark applications do not use the ring in this way, because the local memories are too small for most data structures.
+
+In contrast to the ring, the latency-critical part, which connects the cores to the memory and peripherals, has to handle a lot of traffic.
+This interconnect must adhere to the following requirements:
+\begin{enumerate}
+\item starvation-free scheduling, such that liveness of all cores is guaranteed;
+\item work conserving to optimize for average read latency;
+\item scale linearly in hardware costs to the number of cores; and
+\item pipelined and decentralized arbitration to avoid long wires for high performance.
+\end{enumerate}
+
+A traditional \ix{bus} cannot satisfy the last requirement.
+We implemented a \ix[tree]{tree-shaped network} with \acix{FCFS} arbitration that conforms to all requirements.
+This arbitration network is designed such that it bridges the physical distance on a chip, without decreasing the maximum clock frequency.
+The bottom part of \vref{fig:hardware:warpfield} shows the structure of this new interconnect, having arbitration of \SYMcorecount* cores to a memory controller and peripherals.
+When desired, multiple arbitration trees can be instantiated for higher bandwidths.
+However, as the off-chip memory interface is the bottleneck in the system anyway, we only use one tree.
+The network supports read and write requests, which are issued by the cores.
+Every read and write request of a processor is packetized, containing one command, one address, and multiple data \acp{flit}.
+
+Following the path from the core to the memory in \cref{fig:hardware:warpfield}, the arbitration tree works as follows.
+A \ix{packet} gets a \ix{timestamp} and processor \ac{ID} upon injection, which is sent along with the packet.
+The timestamp can be generated locally to every core, as long as the timestamp generators are synchronized, \eg, during reset.
+The \ac{FCFS} is fair when all generators are in sync.
+When a generator falls behind, a later packet will receive a lower, \ie earlier, timestamp than packets that get timestamps of properly running generators.
+In this case, the network still works, but these packets get slightly prioritized, which in turn influence the maximum latency of other packets.
+Therefore, a trade-off can be made between proper synchronization of the generators, which might be hard to realize in hardware, and the accuracy of control over the latency and priority of packets.
+Drifting clocks, however, will lead to large differences in timestamps, after which starvation-free arbitration cannot be guaranteed anymore.
+The number of bits for the timestamp depends on how much time there can be between two packets that are in the tree simultaneously.
+To determine this period, one has to take the worst-case waiting time for a packet into account.%, which in turn might depend on events like the \ac{SDRAM} refresh period.
+%The timer can wrap around after twice this period, although the arbiter should be aware of this transition.
+
+Next, the packets are sent through a binary arbitration \ix{tree} that multiplexes \SYMcorecount processors to one bus master, where every step in the tree is a multiplexer that does local arbitration of two inputs.
+This \ix{arbitration point} lets the packet with the lowest timestamp precede.
+Rearbitration is only done between packets.
+After every \ac{MUX}, a small buffer can be placed for shorter wires or left out for lower latency.
+Therefore, multiple packets can be `in flight' towards the root of the tree.
+By means of backpressure, requests can be stalled by subsequent \acp{MUX} and the bus slave.
+
+At the root of the tree, \vref{fig:hardware:warpfield} refers to a `\ix{bus}'.
+However, this is essentially just a demultiplexer from the arbitration network to the memory and peripherals.
+In contrast to a traditional bus, the bus itself has only one master, and can be kept physically close to the bus slaves.
+Finally, the response packet will be sent back via a similar tree, but demultiplexes one to \SYMcorecount cores, based on the processor \ac{ID} (which is not shown in the figure for simplicity).
+Because there cannot be contention in the response tree---the \MicroBlaze awaits the response and will always accepted the data immediately---arbitration is not required as well as a backpressure mechanism.
+
+As discussed above, the network is a (balanced) binary tree.
+Therefore, the total number of multiplexers in the network equals $\SYMcorecount-1$.
+Hence, the hardware requirement scales linear to the number of processors.
+
+The distance between core~$\SYMcorecount-1$ and core~$0$ seems to be large, as visualized by \cref{fig:hardware:warpfield}.
+Between their two \ix{ring} segments, there is only one register.
+Therefore, the cores are likely to be placed closer together during \ix[floorplan]{floorplanning} of the hardware design.
+However, \Warpfield uses two different interconnection \ix[topology]{topologies}, which might seem to have conflicting constraints on the placement.
+
+In practice, this combination of topologies is realizable, as depicted in \vref{fig:hardware:warpfield_floorplan}.
+\Cref{fig:hardware:warpfield_floorplan:16} shows a \ndim{2} layout of 16~cores, where the dotted line indicates the ring, and the H-tree the arbitration network.
+We assume that the memory controller can be squeezed in at the center of the design---cores do not necessarily have to be rectangular shaped.
+Although not as symmetrical, \cref{fig:hardware:warpfield_floorplan:32} shows a similar layout for 32~cores.
+The precise layout depends on many aspects, such as the position of memory banks in the \ac{FPGA} and the pinout of the memory module.
+However, it shows that the networks are reconcilable.
+
+\begin{figure}%
+\inputfig[unit=1.5em]{figures/hw_wf_floorplan}%
+\caption{Possible \ndim{2} floorplans of \Warpfield's combined ring and tree topologies}%
+\label{fig:hardware:warpfield_floorplan}%
+\end{figure}
+
+\subsection{Improvements in hardware and software}
+\label{s:hardware:warpfield:synthesis}
+
+The \ix{synthesis} results of an 8-core system with \Warpfield*, as depicted in \vref{fig:hardware:warpfield}, for the \ourVirtex at \SI{100}{\mega\hertz} is shown in \vref{t:hardware:warpfield:synthesis}.
+The table shows that the \MicroBlaze tiles and peripherals slightly differ from \vref{t:hardware:ae:synthesis} because the \ac{NoC} interface changed.
+The total system uses about half the resources of the one with \aethereal.
+The interconnect itself is significantly smaller, mainly because fewer buffers are used and the buffers are smaller.
+Additionally, because packets cannot be interrupted, which is the case with non-contiguous \ac{TDM} slots in \aethereal, a request can be processed immediately upon arrival.
+As a result, the receiving logic becomes simpler.
+With such resource usage, even a 32-core system fits in the \ac{FPGA}. %, where the interconnect is significantly smaller than all cores together.
+However, for fair comparison of the software performance, an 8-core system is used for all comparisons.
+
+\ctable[caption={\ourVirtex resource usage of system with \Warpfield},label={t:hardware:warpfield:synthesis}]{
+		l
+		S[table-format=5.0]>{\hspace{-1.5ex}}r
+		S[table-format=5.0]>{\hspace{-1.5ex}}r
+		S[table-format=3.0]
+	}{
+		\tnote[a]{The tile includes local memories, a timer, \acs{PLB} and bridges (see \vref{fig:starburst:tile}).}
+		\tnote[b]{Main different with respect to \vref{t:hardware:ae:synthesis}.}
+	}{
+	\FL								& \multicolumn{2}{c}{\hdr{\acsp{LUT}}}	& \multicolumn{2}{c}{\hdr{\acsp{FF}}}	& \hdr{\acsp{BRAM}} \ML
+	master \MicroBlaze				&  2664 &    (\SI{6.6}{\percent})		&  2239 &   (\SI{6.9}{\percent})		&     8				\NN
+	master tile\tmark[a]			&  2613 &    (\SI{6.5}{\percent}) 		&  2680 &   (\SI{8.2}{\percent})		&     5 			\NN
+	7$\times$ slave \MicroBlaze		&  2461 &    (\SI{6.1}{\percent}) 		&  2003 &   (\SI{6.2}{\percent}) 		&     8 			\NN
+	7$\times$ slave tile\tmark[a]	&  1184 &    (\SI{2.9}{\percent}) 		&   715 &   (\SI{2.2}{\percent}) 		&     5 			\NN
+	interconnect\tmark[b]			&  4603 &   (\SI{11.5}{\percent}) 		&  2750 &   (\SI{8.5}{\percent}) 		&     0 			\NN
+	peripherals						&  4754 &   (\SI{11.8}{\percent}) 		&  5832 &  (\SI{17.9}{\percent}) 		&    10 			\ML
+	total							& 40149 &  (\SI{100.0}{\percent}) 		& 32527 & (\SI{100.0}{\percent}) 		&   114 			\LL
+}
+
+\label{s:hardware:warpfield:utilization}
+
+Not only the hardware costs, but also the \ix{performance} of the benchmark applications improved.
+\Vref{t:hardware:warpfield:utilization} compares the utilization of both experiments.
+It shows
+the measured time the cores spend in every state, relative to the measurements on the reference design (see \vref{t:hardware:ae:utilization});
+bars to visualize the measurements; and
+equivalent bars of the experiments with \aethereal* (dashed).
+
+The total execution time is reduced for all three applications to \SI{56.9}{\percent}, \SI{76.6}{\percent}, and \SI{85.2}{\percent}, with respect to the total execution time of the experiments on the reference design.
+Moreover, the time the processor stalls at the instruction cache misses and reads from the memory is roughly halved.
+This result can be contributed to the reduction in the read latency of the memory, which is now 37~cycles on average under full load and 25~cycles when idle (where the memory controller still consumes 15~cycles).
+The time spent in execution did hardly change, because the processor's speed did not change.
+The {\ix{utilization}}---the ratio of \emph{execution} to the total time---of the processor can easily be calculated based on these results.
+It improved significantly from 0.21 (\theapp*{radiosity}), 0.63 (\theapp*{raytrace}), and 0.74 (\theapp*{volrend}), to 0.36, 0.80, and 0.85.
+
+\ctable[
+	caption={\MicroBlaze utilization with \Warpfield},
+	label={t:hardware:warpfield:utilization},
+	]{
+		l
+		B{}B{display=shadow,extra bar left spacing=-2ex}
+		B{}B{display=shadow,extra bar left spacing=-2ex}
+		B{}B{display=shadow,extra bar left spacing=-2ex}
+	}{
+		\tnote[a]{Right (dashed) bars indicate the performance in the reference design with \aethereal (see \vref{t:hardware:ae:utilization}).}
+	}{\FL
+	\hdrL{event}			& \hdr{\theapp{radiosity}}	& \hdrL{\hspace{-2ex}\tmark[a]} 
+							& \hdr{\theapp{raytrace}}	& \hdrL{\hspace{-2ex}\tmark[a]} 
+							& \hdr{\theapp{volrend}}	& \hdrL{\hspace{-2ex}\tmark[a]} \ML
+	\barlegend I-cache miss	&  6.3 & 13.7 &  5.9 & 14.0 &  2.6 &  6.3 \NN
+	\barlegend read data	& 27.9 & 58.7 &  7.1 & 16.7 &  6.4 & 14.4 \NN
+	\barlegend write data	&  0.2 &  0.3 &  0.4 &  0.5 &  0.6 &  0.6 \NN
+	\barlegend other		&  1.9 &  6.1 &  1.6 &  5.3 &  2.9 &  4.7 \NN
+	\barlegend execution	& 20.6 & 21.2 & 61.7 & 63.4 & 72.7 & 73.9 \LL
+}
+
+\subsection{Bounded temporal behavior}
+\label{s:hardware:warpfield:predictability}
+
+Although the previous section shows that the average performance increased after replacing \aethereal by our connectionless network, this does not give guarantees for real-time behavior.
+Additionally, \acix{FCFS}, which is used in the arbitration \ix{tree}, is not known to be fair in general and can be outperformed by other schedulers~\cite{zhang:service_disciplines}.
+However, this section will prove that the tree with \ac{FCFS} can be used in a predictable system.
+The key aspect that \ac{FCFS} can be used, stems from the fact that when the tree cannot accept more packets, the \MicroBlaze stalls.
+Therefore, the number of packets that can be injected within a period of time, is limited.
+
+We look only at the arbitration from \SYMcorecount* initiators (\MicroBlazes) to one target (the root of the tree, which is connected to the memory and peripherals), assuming that the target always can process requests, and there is enough bandwidth from the target back to the initiator.
+Recall, the connection type that is serviced, is \ix{latency-critical}.
+Therefore, packets do not have a deadline, but should be handled `as soon as possible'---but starvation-free.
+\ix[packet]{Packets} are non-preemptive, and \acpix{flit} of the same packet are always contiguous when they are injected in the network.
+
+We define the \emph{\ix{service time}} \SYMlatency[\SYMpackettype] of a packet with type \SYMpackettype and length \SYMpacketsize*[\SYMpackettype], which is the time duration a packet spends in total in the network.
+%This period is bounded by the time \SYMarrival[\SYMpacket] packet \SYMpacket arrives at a leaf of the tree and gets its timestamp, and the time \SYMfinish[\SYMpacket] the last \ac{flit} left the root and therefore is serviced.
+This is the total amount of time between a packet arrives at a leaf of the tree and gets its \ix{timestamp}, and the moment the last \ac{flit} leaves the root and therefore is serviced.
+Hence, \SYMlatency depends on the total latency introduced by the network and the length of the packet.
+An initiator can only inject a new packet when the last \ac{flit} of the previous one is injected in the tree. %, so $\symTarrive[\sympkt]<\symTarrive[{\sympkt[']}]<\symTfinish[\sympkt]$ for packet \sympkt{} and its successor \sympkt[']. % from the same initiator.
+
+In case of the best-case service time, denoted \SYMlatencyBC*, a packet is not hindered by other packets, and is only hold up by the buffers after a multiplexer in the tree.
+Given a balanced binary tree, a packet therefore encounters $\lceil\log_2\SYMcorecount\rceil$ buffers in its path.
+A multiplexer in the (binary) arbitration tree can only process one \ac{flit} per time unit, \ie clock cycle.
+Processing the first \ac{flit} of a packet in a tree without buffers is done by just combinatorial logic, which takes zero clock cycles; the other \acp{flit} will follow in the subsequent clock cycles.
+Traversing a buffer always takes at least one time unit, even if the buffer is empty.
+Therefore, the best-case service time of a packet of type \SYMpackettype is
+\begin{align}
+\SYMlatencyBC[\SYMpackettype] &= \SYMpacketsize[\SYMpackettype]-1+\lceil\log_2\SYMcorecount\rceil. \label{eq:hardware:latency_bc}
+\end{align}
+
+The worst-case service time, denoted \SYMlatencyWC*, is \SYMlatencyBC plus the time that the packet is obstructed by all \acp{flit} in (the buffers of) the tree and the largest packet possible just being injected by all other $\SYMcorecount-1$ initiators.
+Given $\SYMcorecount-1$ multiplexers in the tree, the total buffer capacity is $(\SYMcorecount-1)\SYMbuffer$, where \SYMbuffer* denotes the buffer capacity in the number of \acp{flit} after a multiplexer.
+However, only the \acp{flit} that cross the path of the packet and therefore compete for arbitration have to be taken into account.
+So, the $\lceil\log_2\SYMcorecount\rceil$ \acp{flit} in between the packet concerned and the root of the tree will not obstruct the packet, as they travel with the same speed towards the root and do not influence the arbitration of the packet.
+Hence, given a packet of type \SYMpackettype, the worst-case service time is
+\begin{align}
+\SYMlatencyWC[\SYMpackettype]
+	&= \SYMlatencyBC[\SYMpackettype]+(\SYMcorecount-1)\SYMbuffer+(\SYMcorecount-1)\max_{\SYMpackettype'\in\SYMpackettypes}\SYMpacketsize[\SYMpackettype']-\lceil\log_2\SYMcorecount\rceil \notag\\
+	&= \SYMpacketsize[\SYMpackettype]+(\SYMcorecount-1)\left(\SYMbuffer+\max_{\SYMpackettype'\in\SYMpackettypes}\SYMpacketsize[\SYMpackettype']\right)-1,
+\end{align} where \SYMpackettypes* denotes the set of all possible types of packets.
+Hence, the service time is bounded, and therefore the arbitration is starvation free.
+
+As shown above, the worst case depends mostly on the size of the largest packet.
+In our system, there are four types of packets: a word and burst read request, both consisting of two \acp{flit} (command and address); a write request of three \acp{flit} (also includes data); and a burst write of ten \acp{flit} (having eight data \acp{flit}).
+For the 8-core \Warpfield system, where $\SYMbuffer=$~2 \acp{flit}, the worst-case service time of a read packet can be calculated as $\SYMlatencyWC[\textrm{read}]=$~85 cycles, where $\SYMlatencyBC[\textrm{read}]=$~4 cycles.
+%The difference between \SYMlatencyBC and \SYMlatencyWC is quite high, which results in a high---but bounded---uncertainty of the service time of a request.
+In contrast, the worst-case service time in the reference system with \aethereal (as of \cref{s:hardware:ae}) is $\SYMlatencyWC=$~84 cycles.
+However, \Warpfield's \emph{measured} total read latency, or round-trip time of a read request, is 30.66 cycles on average for all four applications.
+This measurement includes the 15~cycles required by the \ac{SDRAM} controller, and the latency of the return packet, which is also $\lceil\log_2\SYMcorecount\rceil$.
+So, the measured average-case service time is about 12.66~cycles.
+
+\SYMlatencyWC for our interconnect is high, because a packet must wait for every core issuing the largest packet simultaneously.
+However, this is a very unlikely situation, as the largest packets are burst writes, and these are rare.
+The measured average \ix[packet interval]{interval} \SYMpacketinterval* between packets is listed in \vref{t:hardware:warpfield:packets}.
+The table shows that for all measured applications, a burst write is issued two to three orders of magnitude less than a read.
+%Moreover, a burst write packet consists of 10~\acp{flit}, and is responsible for $(n-1)\cdot 10=70$ cycles of \SYMlatencyWC.
+%To reduce \SYMlatencyWC, burst writes could be converted to separate writes before entering the tree.
+%Then, the largest packet will be 3~\acp{flit}, resulting in a worst case of $\SYMlatencyWC[\textrm{read}]=36$.
+%However, overhead increases will increase in such setup.
+
+\ctable[caption={Measured average packet issue intervals \SYMpacketinterval*, aggregated for all 8~cores (in clock cycles)},label={t:hardware:warpfield:packets}]
+	{
+		l
+		S[table-format=2.0]
+		S[table-format=4.1]
+		S[table-format=5.1]
+		S[table-format=5.1]
+	}{
+		\tnote[a]{Causes: uncached data read}
+		\tnote[b]{Causes: instruction cache miss; data cache miss}
+		\tnote[c]{Causes: uncached data write; data cache word flush}
+		\tnote[d]{Causes: data cache line flush}
+	}{
+\FL
+\hdrL{packet type in \SYMpackettypes}	& \hdr{\SYMpacketsize*}	& \hdr{\theapp{radiosity}}	& \hdr{\theapp{raytrace}}	& \hdr{\theapp{volrend}}	\ML
+read word\tmark[a]						& 2						& 10.4						& 47.6						& 60.4						\NN
+read burst\tmark[b]						& 2						& 40.7						& 51.4						& 100.3						\NN
+write word\tmark[c]						& 3						& 763.2						& 6197.0					& 4187.5					\NN
+write burst\tmark[d]					& 10					& 18078.9					& 7875.2					& 10049.1					\LL
+}
+
+
+%\subsection{Limited Interference}
+
+The fact that burst writes are rare, explains why the measured performance in \cref{s:hardware:warpfield:utilization} improved, although the worst-case service time increased.
+Namely, burst writes \emph{can} \ix[packet interference]{interfere} with read requests, but there are not enough burst writes to interfere with them \emph{all}---which is assumed for \SYMlatencyWC.
+Let us calculate the expected interference, given the measured packet issue intervals.
+
+Per time period \SYMperiod*, the number of packets of type $\SYMpackettype\in\SYMpackettypes$ issued by one of the \SYMcorecount cores, denoted \SYMpacketcount*[\SYMpackettype,\SYMperiod], can be calculated as
+\begin{align}
+\SYMpacketcount[\SYMpackettype,\SYMperiod]
+	&= \frac{1}{\SYMcorecount}\cdot\frac{\SYMperiod}{\SYMpacketinterval[\SYMpackettype]}. \\
+%
+\intertext{%
+For example, within a time period \SYMperiod*, \theapp{raytrace} issues per core on average}
+%
+\SYMpacketcount[\text{read},\SYMperiod]
+	&= \SYMpacketcount[\text{read word},\SYMperiod]+\SYMpacketcount[\text{read burst},\SYMperiod] \notag \\
+	&= \frac{1}{8}\left(\frac{\SYMperiod}{\num{47.6}}+\frac{\SYMperiod}{\num{51.4}}\right)  && \text{(for \theapp{raytrace})} \notag \\
+%
+\intertext{%
+read packets.
+Packets can be hindered by \acp{flit} sent by the other $\SYMcorecount-1$ cores.
+Hence, the number of these \acp{flit}, denoted \SYMinterference*[\SYMperiod], equals}
+%
+\SYMinterference[\SYMperiod]
+	&= \frac{\SYMcorecount-1}{\SYMcorecount}\sum_{\SYMpackettype\in\SYMpackettypes}\SYMpacketsize[\SYMpackettype]\frac{\SYMperiod}{\SYMpacketinterval[\SYMpackettype]}. \\
+%
+\intertext{%
+For \theapp{raytrace}, the number of interfering packets per time period \SYMperiod is}
+%
+\SYMinterference[\SYMperiod]
+	&= \frac{7}{8}\left(\frac{2\SYMperiod}{\num{47.6}}+\frac{2\SYMperiod}{\num{51.4}}+\frac{3\SYMperiod}{\num{6197.0}}+\frac{10\SYMperiod}{\num{7875.2}}\right). && \text{(for \theapp{raytrace})} \notag \\
+%
+\intertext{%
+So, every read packet waits on average at most for}
+%
+\frac{\SYMinterference[\SYMperiod]}{\SYMpacketcount[\text{read},\SYMperiod]}
+	&\approx \num{14.3} && \text{(for \theapp{raytrace})} \notag
+\end{align}
+interfering \acp{flit}, and therefore \num{14.3}~clock cycles.
+Including the latency of the memory controller and traversing the tree back to the core, the average latency of a read request under full load of all applications can be calculated as \num{37.86}~clock cycles, which is close to what we measured.
+
+Whether averaging interfering \acp{flit} over multiple requests is allowed or not, depends on the real-time requirements of the platform.
+This section showed the trade-off between a cheap (in terms of hardware costs), and average-case high-performance interconnect, versus a more robust (in terms of temporal behavior), but expensive interconnect.
+As \Warpfield fits our needs better, consecutive sections will continue to use this interconnect.
+
+
+\section{Inter-core synchronization profile}
+\label{s:hardware:syncprofile}
+
+\glsreset{RMW}
+
+The previous section focused on the communication between cores and memory.
+The inter-core interconnect was not used for application data, mostly because of limited memory size.
+As \ix{synchronization} in principle does not need large data structures, this is a possible use of the \ix{ring}.
+
+In modern general-purpose chips, synchronization is usually polling-based using atomic \acix{RMW} operations as building blocks~\cite{mellor-crummey:scalable_sync,culler:comp_arch}, which are either hidden in a lock library or used by the programmer directly.
+\ac{RMW} operations have a relatively low latency and are wait-free~\cite{herlihy:wait_free}.
+However, they require a cache-coherent system, which is hard to realize in general and absent in the \IntelSCC, for example.
+Without cache coherency, \ac{RMW} operations induce traffic to external \acix{SDRAM}, which we try to relieve as much as possible.
+
+Hardware cache coherency and \ac{RMW} instructions are not always applied in embedded systems, because of high hardware costs and the lack of \ac{IP}~\cite{ophelders:software_cache}.
+Additionally, hardware cache coherency is unsupported for \ac{FPGA} targets by common \ac{SoC} design tools, such as Xilinx \noac{XPS} and Altera \noac{SOPC} Builder, as neither the \MicroBlaze nor the Nios~\Rmnum{2} supports it.
+The alternative is to use a generic software implementation of a synchronization algorithm, like the \ix{bakery algorithm} for \ix[mutex]{mutexes}~\cite{lamport:mutex}.
+Again, the \ac{SDRAM} is then used for synchronization, which is a scarce resource.
+We will bypass the memory completely by using the ring in our approach, but first investigate the effect of synchronization on the memory bandwidth using several benchmark applications.
+
+\subsection{Polling main memory measurements}
+
+The applications that are used in the experiments, are listed in \vref{t:hardware:sync_profile:apps}.
+The table shows the number of mutexes the applications use.
+\Theapp{fluidanimate} and \theapp{radiosity} have many mutexes, as a mutex only protects one (fluid) element in a grid, or a single (radiating) patch in the \ndim{3} model.
+The other applications use the locks in a more coarse-grained fashion, where it protects larger shared data structures.
+Refer to \cref{s:starburst:apps} for more details about these applications.
+
+\ctable[caption={Applications for synchronization experiments},label={t:hardware:sync_profile:apps}]{
+	llS[table-format=5.0]
+}{}{\FL%
+	\hdrL{benchmark set}				& \hdrL{application}		& \hdr{\ix[mutex]{mutexes}} \ML
+	\multirow{1}{*}{\PARSEC*}			& \theapp*{fluidanimate}	& 4403 \ML
+	\multirow{3}{*}{\SPLASH*}			& \theapp*{radiosity}		& 26034 \NN
+										& \theapp*{raytrace}		& 35 \NN
+										& \theapp*{volrend}			& 37 \LL
+}
+
+Every mutex is in fact a \lstinline|pthread_mutex_t|, which has been implemented using \citeauthor{lamport:mutex}'s \ix{bakery algorithm}~\cite{lamport:mutex}.
+The algorithm is based on the concept of taking a unique number from a numbering machine when a customer enters a bakery shop.
+It works as follows.
+The algorithm makes use of two arrays, named \emph{entering}, and \emph{number}, both initialized to zero.
+Every process has its own element in both arrays.
+When a process wants to lock the mutex, it flags its presence via its entering field, and iterates over the whole number array to determine the highest number.
+It writes the highest number, plus one, into its field of the number array, and resets the entering flag.
+Then, the process polls all fields, until no other process is currently entering or has a lower number, after which it gets the lock on the mutex.
+It should be clear that the algorithm relies on \ix{polling} the shared memory.
+
+For the experiments, we use a 32-core variant of the system with \Warpfield*, as discussed in \cref{s:hardware:warpfield}.
+The memory controller of the \acix{SDRAM} has hardware support to measure \ix{memory traffic}.
+Using this information and profiling data measured by the \MicroBlaze and the \ac{OS}, traffic streams of the applications can be identified.
+\Vref{fig:hardware:memtraffic:bakery} plots the results.
+The figure presents the traffic as seen by the \ix{memory controller}, which aggregates the traffic of all \MicroBlazes, and it distinguishes:
+\begin{itemize}
+\item 8-word burst \emph{instruction cache reads} (bottom of chart);
+\item 8-word burst \emph{data cache reads};
+\item uncached word read, participating in locking a \emph{mutex};
+\item other \emph{uncached} word read of shared memory;
+\item all 8-word burst and single word \emph{writes};
+\item all \emph{spare} time the memory controller is idle (top).
+\end{itemize}
+
+\begin{figure}%
+\inputfig{figures/hw_lock_traffic_bakery}%
+\caption{Measured traffic on \acs{SDRAM} controller}%
+\label{fig:hardware:memtraffic:bakery}%
+\end{figure}
+
+%\ac{SDRAM} bandwidth is issue (memory wall); \cite{casu:hybrid_noc} shows feasible many-core with up to 10 cores.
+
+\Vref{fig:hardware:memtraffic:bakery:time} depicts on which operations the time is spent by the memory controller.
+Since the spare time is (almost) zero, the controller is completely saturated and imposes a bottleneck on the system.
+The bandwidth usage corresponding to \cref{fig:hardware:memtraffic:bakery:time} is shown in \cref{fig:hardware:memtraffic:bakery:bandwidth}.
+Although the controller is saturated for all applications, the bandwidth greatly differs, because word reads and writes take almost the same amount of time as burst reads and writes, but leave most of the potential bandwidth unused.
+\Ac{SDRAM} commands like precharge and refresh do not show up in the bandwidth, but do contribute to the latency of commands.
+
+In both \cref{fig:hardware:memtraffic:bakery:time,fig:hardware:memtraffic:bakery:bandwidth}, the writes are hardly visible as they occur relatively sporadically.
+Mutex operations contribute by \SI{35}{\percent} on average to the memory controller load and \SI{18}{\percent} to the bandwidth usage, surprisingly.
+Although the bakery algorithm relies on reads \emph{and} writes, reads are occurring far more often than writes, because every process must \ix[polling]{poll} the \emph{entering} and \emph{number} fields of all other processes, but writes just its own.
+In order to reduce the total amount of memory traffic, this mutex related traffic is a good candidate for revision, as the implementation of synchronization is transparent to the application, and can be changed without touching the application, in contrast to cache utilization and shared data accesses.
+
+\subsection{Mutex locality}
+
+\Vref{fig:hardware:lockstats} shows additional information about the state of the mutexes of the same applications.
+The figure shows that mutexes of \theapp{fluidanimate} are (almost) always free at the moment they are being locked, where mutexes of the other application are free for about \SI{80}{\percent} of the time.
+Additionally, the hatched area shows the fraction of mutexes that where not only free, but also classified as \emph{\ix[relock]{relocks}}: a successive lock on the same mutex by the same process.
+
+\begin{figure}%
+\inputfig{figures/hw_lock_mutex_stats}%
+\caption{Mutex locking behavior per application}%
+\label{fig:hardware:lockstats}%
+\end{figure}
+
+Based on \cref{fig:hardware:lockstats}, it can be concluded that most of the mutexes are usually free and reused by the same process, so a mutex is (mostly) \emph{\ix[mutex locality]{local}}.
+Busy mutexes, for which processes are blocking each other, are scarce.
+Since they involve (expensive) global synchronization, they should be avoided.
+
+As shown above, mutexes contribute to the memory bandwidth usage, which is a scarce resource in many-core systems.
+The next section proposes a solution that implements locks on top of the ring, which bypasses the \ac{SDRAM} completely and exploits the locality of mutexes.
+Since mutexes only require a small amount of memory, they can be kept locally, in a (non-coherent) \acix{SPM}, for example.
+
+
+\section{Asymmetric distributed lock algorithm}
+\label{s:hardware:distlock}
+
+As the previous section showed, \ix{synchronization} traffic is a significant part of all traffic to the \ac{SDRAM}.
+In this section, an algorithm is proposed that bypasses main memory.
+It is implemented on top of the core-to-core \ix{ring} infrastructure, as described in \cref{s:hardware:warpfield:setup}, and it utilizes the message-passing \ac{API} of \Helix* (see \cref{s:starburst:helix}) for inter-process communication.
+The lock algorithm is \emph{\ix[distributed lock]{distributed}}, because there is no single central component that handles all lock-related operations.
+Moreover, the algorithm is \emph{asymmetric}, referring to the different roles of the participants in the algorithm.
+
+\subsection{Existing synchronization solutions}
+
+Besides using \ac{RMW} operations, hardware support for synchronization can also be realized differently.
+\citeauthor{stoif:hardware_sync} use a central memory controller where processors compete for protected memory regions~\cite{stoif:hardware_sync}.
+The memory controller can also be extended to manage the state of synchronization data units that reside in the memory~\cite{monchiero:optim_for_sync,zhu:ssb}.
+\citeauthor{tumeo:hwsw_sync} implement synchronization using engines like the Xilinx mutex component~\cite{tumeo:hwsw_sync}.
+Like fixed synchronization networks~\cite{abellan:gline}, all these hardware components have in common that the number of concurrent synchronization primitives is limited, where our solution scales naturally in software.
+Additionally, centralized units fundamentally introduce a bottleneck when scaling to more cores.
+
+Symmetric distributed algorithms require many messages to operate~\cite{singhal:distlock}, because all nodes need to be informed separately.
+These algorithms are aimed for fault tolerance, but as we do not assume a faulty device and message exchange is relatively expensive, the overhead is needlessly high.
+\citeauthor{yu:distlock} introduce a distributed lock component for every core, which all snoop synchronization messages from a bus~\cite{yu:distlock}.
+Having such a global bus, limits scalability---the paper presents experiments with only four cores.
+
+An asymmetric distributed mutual exclusion algorithm without experimental results has been proposed by \citet{wu:token}, using a central coordinator that forwards lock requests on mutexes, where processes form a distributed waiting queue.
+In this algorithm, queuing is done in a distributed manner, but locks are always sent back to the server on unlock.
+As we found out (see \cref{s:hardware:syncprofile}), mutexes are often reused by the same process.
+This still requires many messages, where our solution optimizes for this mutex locality, and we add a quantitative evaluation.
+
+Using local memories in a \acs{NUMA} architecture for message passing is a common approach~\cite{howard:intel_scc,casu:hybrid_noc}, but generic all-to-all communication is potentially expensive in hardware.
+However, our write-only ring implementation can be kept low cost.
+
+\subsection{The algorithm: a three-party asymmetry}
+\label{s:hardware:distlock:algorithm}
+
+The ring can be kept low cost, because of three reasons.
+1) The required bandwidth for synchronization purposes is low.
+2) The routing in a ring is trivial, and thus cheap.
+3) The latency of one clock cycle per tile is not an issue, because most of the latency is introduced by the software of the message-handling daemons---even when a hundred cores are added, the increased latency by the ring is much less than the costs of a single context switch.
+\Ac{FPGA} \ix{synthesis} shows that the \ix{ring} uses about \SI{1.4}{\percent} of the total amount of logic for the \ac{PLB} slaves and the ring itself.
+As the algorithm only relies on message exchange, which does not require time to behave correctly, predictable timing of the ring is not required.
+
+The main idea of our algorithm is that when a process wants to enter a critical section---and tries to lock a mutex---it sends a request to a server.
+This server either responds with ``You got the lock and you own it'', or ``Process \SYMproc owns the lock, ask there again''.
+In the latter case, the locking process sends a message to \SYMproc, which can reply with ``The lock is free, now you own it'', or ``It has been locked, I'll signal you when it is unlocked''.
+When a process unlocks a lock, it will migrate it to the process that asked for it, or flag it is being free in the local administration otherwise.
+In this way, processes build a fair, distributed, \acix{FCFS} waiting \ix{queue}.
+In great contrast to a token-based solution, which also migrates ownership of locks, processes only give up the ownership when they are asked to do so.
+
+\Cref{alg:hardware:distlock:server,alg:hardware:distlock:ask,alg:hardware:distlock:lock} show the implementation.
+In more detail:
+\inputfig{figures/hw_lock_alg}%
+\begin{itemize}
+\item \emph{lock server} (\cref{alg:hardware:distlock:server}): a process that registers the owner process of a lock (or the last one waiting) using the map \SYMservermap.
+	When the server gets a \emph{request} message, it either responds with that the lock is available (line~\ref{line:distlock:server:free}) or already owned (line~\ref{line:distlock:server:owned}), depending on whether the lock has already been registered on the server.
+	When a process owning a lock does not need it anymore, it can \emph{give it up}.
+	A lock is (statically) assigned to a single server, and a server can service many locks.
+\item \emph{message handler} (\cref{alg:hardware:distlock:ask}): every \MicroBlaze runs a single message-handling daemon, which handles incoming messages (see \cref{s:starburst:helix}).
+	When another process \emph{asks} for an owned lock, this daemon inspects the lock administration (denoted map \SYMlockset[\SYMproc]) of the owning local process.
+	Then, it either marks the lock for migration on unlock (line~\ref{line:distlock:ask:migrate}) or steals the lock (line~\ref{line:distlock:ask:steal}).
+	In case of the race condition that the give up and the ask message are sent concurrently, the daemon replies that the lock is free (line~\ref{line:distlock:ask:race}).
+\item \emph{locking process} (\cref{alg:hardware:distlock:lock}): the process that wants to enter a critical section.
+	When \emph{locking}, it checks its own administration.
+	When the lock is already owned by the process, it will lock it immediately, without communicating with other cores.
+	Otherwise, it will request the server (line~\ref{line:distlock:lock:req}) and ask the owner (line~\ref{line:distlock:lock:ask}) of the lock when appropriate.
+	Asking for a locked lock implicitly enqueues the asking process (line~\ref{line:distlock:lock:wait}).
+	On \emph{unlock}, an (uncached) read from main memory is performed (line~\ref{line:distlock:unlock:memsync}), which enforces an ordering between communication via the ring and operations on the background memory, and ensures that all outstanding memory operations will be completed before the lock is unlocked---the system implements the \acl{RC} memory model.
+	This is guaranteed, as the interconnect arbitrates in \ac{FCFS} manner and the memory controller processes all requests in-order.
+	Then, only locally is the state updated (line~\ref{line:stateupdate}), unless there is a process already waiting, which will be signaled in that case (line~\ref{line:distlock:unlock:signal}). 
+	When the process exits, all owned locks must be given up, which is left out of \cref{alg:hardware:distlock:lock} for simplicity.
+\end{itemize}
+
+This algorithm works only when assuming that messages cannot get lost, and the message handler cannot be interrupted to handle another message.
+Then, \ix[mutex]{mutual exclusion} is guaranteed, as the first process in the queue is well known, which owns (and might lock) the mutex.
+When a mutex is not owned, a process requesting it only needs to send one message.
+If it is owned, but not locked, two messages are required.
+In any case, progress to enter the critical section cannot be stalled, as long as messages are handled.
+Moreover, the waiting time for processes that are locking a mutex, is bounded by means of this queue---assuming that the process that holds the lock, will release it eventually.
+
+Unfortunately, testing the algorithm with a model checker like \textsc{Spin}~\cite{holzmann:spin} is not feasible.
+To test queuing properly, the \textsc{Spin} model requires many concurrent processes, which all have multiple ways of interleaving messages and state changes.
+This leads to excessive verification run times.
+On the other hand, when the model is simplified in order to reduce verification time, it is unclear whether it still matches the algorithm.
+
+Next, the performance of the proposed ring and new lock algorithm will be compared to the bakery lock.
+
+\subsection{Experimental comparison results}
+\label{s:hardware:distlock:experiments}
+
+To evaluate the distributed lock, experiments are conducted on the same 32-core system as of \cref{s:hardware:syncprofile}.
+The bakery lock is compared to the distributed lock, where the former is referred to as the `base case'.
+
+For the latter, the maps \SYMservermap and \SYMlockset[\SYMproc] of \cref{alg:hardware:distlock:server,alg:hardware:distlock:ask,alg:hardware:distlock:lock} are implemented using \noac{AA}-trees~\cite{andersson:aa_tree}, having $\SYMupperbound[\log\;\lvert\SYMmap\rvert]$ complexity, where \SYMmap is either map.
+The maps are not bound in maximum size.
+Every node in the \noac{AA}-tree, \ie mutex data structure, of \SYMservermap consumes six words of heap memory, every node of \SYMlockset[\SYMproc] uses nine words.
+Although the different concepts of a lock server and message-handling daemon are important in the algorithm, the functionality of the server is merged into the daemon in the actual implementation.
+This allows a quick response of request and give-up messages.
+As a result, every message-handling daemon can act like a lock server, and locks are statically assigned to one of the 32~daemons based on the address of the mutex, which implements a naive way of load balancing.
+
+The four applications have been run for both configurations, repeated ten times with slightly different compile settings to average out cache effects by placing memory segments differently.
+All applications start one worker process on each of the 32 cores.
+When a process blocks on a mutex, the blocked time is left unused by the application for that specific core.
+Only the parallel body of the application has been measured; (sequential) preprocessing steps have been ignored.
+
+\Vref{fig:hardware:memtraffic:dist:time} shows the types of \ix{memory traffic} of both the base case and the distributed lock.
+The figure shows that for \theapp{raytrace} and \theapp{volrend} the memory bandwidth is not saturated.
+In \vref{t:hardware:distlock:msgs}, the measured number of exchanged messages is depicted.
+Even for \theapp{fluidanimate}, the ring utilization is very low, although the application is quite message-intensive---every core handles 809~messages per second on average.
+One message consists of six words, where the ring allows injection of one word per core every clock cycle.
+Thus, the ring has at least a bandwidth of $\frac{1}{6}\cdot\SI{100e6}{words\per\second}=\SI{16.7e6}{messages\per\second}$, of which \theapp{fluidanimate} uses \SI{0.155}{\percent}.
+
+\begin{figure}%
+\inputfig{figures/hw_lock_traffic_dist}%
+\caption{Measured traffic on \acs{SDRAM} controller, using bakery and distributed locks}%
+\label{fig:hardware:memtraffic:dist:time}%
+\end{figure}
+
+\ctable[label=t:hardware:distlock:msgs,caption={Distributed lock statistics}]{
+					l
+					S[table-format=7.0]
+	<{\hspace{-1ex}}S[table-format=6.0]
+	<{\hspace{-1ex}}S[table-format=6.0]
+	<{\hspace{-1ex}}S[table-format=5.0]
+	<{\hspace{-1ex}}S[table-format=6.0]
+	<{\hspace{-1ex}}S[table-format=5.1]
+	}{
+	\tnote[a]{\footnotesize See \cref{alg:hardware:distlock:server,alg:hardware:distlock:ask,alg:hardware:distlock:lock}}
+	\tnote[b]{\footnotesize Lock messages exchanged per second over the ring}
+	}{
+% Post process table from OOo Calc
+% :%s/\t/ \& /g | %s/ & \\/ \\/ | %!sort
+%%%%% twice: :%s/\([0-9]\)\([0-9]\{3\}\>\)/\1,\2/g
+\FL
+& \hdr{\# locks} & \hdr{request\tmark[a]} & \hdr{ask\tmark[a]} & \hdr{giveup\tmark[a]} & \hdr{signals\tmark[a]} & \hdr{\si{msgs\per\second}\tmark[b]} \ML
+\input{data/hw_distlock_msgs.dat}}
+
+Performance numbers, which are averaged over all runs, of the applications are shown in \vref{fig:hardware:distlock:improvements}.
+All values are normalized to the base case with the bakery algorithm, which is 1 by definition.
+In the chart, the first metric shows the relative change of the execution time of the application: all application benefit from the distributed lock, \theapp{fluidanimate} is even 9~times faster using the distributed lock compared to using the bakery lock.
+
+\begin{figure}%
+\inputfig{figures/hw_lock_improvements}%
+\caption{Difference between using bakery algorithm and distributed lock with ring}%
+\label{fig:hardware:distlock:improvements}%
+\end{figure}
+
+Next, two metrics indicate the \ac{SDRAM} usage, which aggregates operations of all 32 cores.
+It shows that the memory bandwidth is used more effectively; the read bandwidth increases, with a similar time spent on reading, because less uncached word and more burst operations are performed.
+
+Finally, two metrics are shown of one \MicroBlaze that has hardware support for measuring microarchitectural events.
+Since all cores are running the same kind of workload, it can be assumed that all other cores behave similarly.
+Overall, the core \ix{utilization} is higher for all applications, since cores stall less on (uncached) reads.
+
+\subsection{Locality trade-off}
+
+Whether the complexity of the distribution lock pays off for a given application, is closely related to the locality of its mutexes.
+There is a trade-off between a main-memory polling algorithm like bakery that consumes scarce bandwidth, or keeping (or caching) mutexes locally and having higher latencies for non-local mutexes.
+\Vref{fig:hardware:distlock:migration} gives insight into this trade-off.
+
+\begin{figure}%
+\inputfig{figures/hw_lock_migration}%
+\caption{Impact of locality on acquiring time of a lock, based on synthetic benchmark}%
+\label{fig:hardware:distlock:migration}%
+\end{figure}
+
+Naturally, when a mutex is used by only one process, it is always local and locking it is very fast.
+When mutexes are used by more processes, the lock must be migrated regularly, which involves communication between cores.
+Hence, the amount of expensive communication depends on the \emph{\ix[mutex locality]{locality}} of the mutex, which we define as the fraction of \ix[relock]{relocks} over free locks.
+In the synthetic setup used for \cref{fig:hardware:distlock:migration}, a mutex is forced to a specific locality, and the average time is measured of locking that mutex.
+The figure shows the relation between locality and average lock time for both the bakery implementation (which takes \SI{270}{\micro\second} on average) and the distributed lock (\SI{3.5}{\micro\second} for a relock).
+Although the exact slope and height of the lines in the figure depend on the workload, the trend is always the same.
+
+For the four applications, the locality (as can also be found in \vref{fig:hardware:lockstats}) is respectively \num{0.91}, \num{0.71}, \num{0.95}, \num{0.66}, and is also indicated in \cref{fig:hardware:distlock:migration}.
+This shows that applications with globally used mutexes, might not benefit from the distributed lock\footnote{%
+	Obviously, one can argue that having global locks in massively parallel applications is a bad programming habit anyway.}, %
+but the tested applications are all at the right side of the break-even point.
+
+\Vref{t:hardware:lock:entry_wait} shows two additional measurements regarding locking behavior of the distributed lock.
+It lists the time every application spends on executing the locking algorithm (including sending and waiting for messages) while trying to get a lock on a mutex, and on waiting for a locked mutex.
+For example, \theapp{fluidanimate} spends in total \SI{35}{\percent} of the whole execution time of the application on locking operations.
+Since most of the locking time is spent on waiting, improving the locking algorithm itself any further will hardly lead to a \ix{performance} increase; making locks more local is probably more beneficial.
+
+\ctable[caption={Distributed lock performance measurements, as fraction of total execution time},label={t:hardware:lock:entry_wait}]{
+	l
+	S[table-format=1.2,table-auto-round]
+	S[table-format=2.2,table-auto-round]
+	}{}{
+\FL						& \hdr{lock (\si{\percent})}	
+						& \hdr{waiting (\si{\percent})} \ML		% & total enter time
+\theapp{fluidanimate}	& 7.583			& 27.424    \NN			% & 35.007	
+\theapp{radiosity}		& 1.275			& 24.720    \NN			% & 25.995	
+\theapp{raytrace}		& 0.03402		& 0.18623   \NN			% & 0.22025	
+\theapp{volrend}		& 0.4997		& 8.7376	\LL			% & 9.2373	
+}
+
+Although the distributed lock has only been tested on 32~cores, we expect that the costs and \ix{trade-off} are the same on larger systems.
+As \cref{alg:hardware:distlock:server,alg:hardware:distlock:ask,alg:hardware:distlock:lock} do not depend on the number of cores, just the number of stored locks in maps \SYMservermap and \SYMlockset[\SYMproc] influence the performance.
+When the balance between servers and worker processes is kept the same, then the concurrency in the design of the application is the only relevant factor.
+
+
+\section{Hardware and performance scalability}
+\label{s:hardware:scalability}
+
+This chapter proposed two optimizations on existing systems: a new interconnect and a new distributed lock algorithm.
+Although these solutions are designed to be \ix[scalability]{scalable}, this section will discuss in more depth how the application's performance is influenced when scaling to more cores.
+We evaluate the total \ix{performance} in terms of the combined amount of executed instructions, with respect to the number of cores, denoted \SYMcorecount*.
+Ideally, doubling the number of cores will also double the total computing power, and therefore the performance.
+Obviously, this is in practice not the case.
+In general, adding a core will increase traffic to the main memory, which has a limited bandwidth, resulting in slowing down other cores.
+
+The arbitration tree of the \Warpfield* \ix{interconnect} handles the core-to-memory traffic.
+As \cref{s:hardware:warpfield:setup} discussed, the required amount of hardware resources is constant per core, for both the core and tile, as for the tree.
+Therefore, the hardware scales \SYMbound[\SYMcorecount].
+
+However, the performance is more complex to determine.
+The \ix{tree} grows in number of multiplexers, so the depth of the tree will grow \SYMbound[\log\SYMcorecount] (see also \cref{eq:hardware:latency_bc}).
+Therefore, memory reads will take more time to complete, when the number of cores is increased.
+Additionally, more cores also means more concurrent traffic streams to memory.
+For simplicity, we assume that the \MicroBlaze* executes every clock cycle one instruction, which is to be read from memory, and every eighth instruction actually reads data from memory.
+So, executing eight instructions reads the memory nine times, but most of the reads are either an instruction or data cache hit.
+We denote the weighted average of the instruction and data cache hit rate as \SYMhitrate*, and we assume that cache lines are filled using the target-word-first policy, such that the \MicroBlaze can continue when the first word from memory arrives.
+
+Assume that the system is not bounded by the memory bandwidth, so concurrent reads of different \MicroBlazes do not obstruct each other.
+Then, the sum of executed instructions of all cores per second can roughly be calculated as
+\begin{align}
+			& \frac	{\text{number of instructions, such that one read miss occurs}}
+					{\text{latency of one miss} + \text{one cycle per hit}}
+			 \cdot \SI{100}{\mega\hertz}\cdot \SYMcorecount. \notag\\
+%
+\intertext{%
+Given a cache hit rate of \SYMhitrate, a cache miss occurs $1-\SYMhitrate$ times per memory read.
+In other words, $\frac{1}{1-\SYMhitrate}$ reads will generate one cache miss and $\frac{1}{1-\SYMhitrate}-1$ hits.
+As discussed above, the instructions--reads ratio is $8:9$.
+Moreover, an instruction and data cache hit might occur simultaneously.
+Using \cref{eq:hardware:latency_bc}, and an \ac{SDRAM} memory controller latency of 15~cycles, we can fill in the equation:
+}
+%
+\eqkindof\;	& \frac	{\frac{8}{9}\cdot\frac{1}{1-\SYMhitrate}}
+					{(\SYMlatencyBC[\text{read}]+\text{\acs{SDRAM} latency}+\text{back via tree})+\left(\frac{8}{9}\cdot\left(\frac{1}{1-\SYMhitrate}-1\right)\right)}
+			  \cdot \SI{100}{\mega\hertz}\cdot \SYMcorecount \notag\\
+\eqkindof\;	& \frac	{\frac{8}{9}\cdot\frac{1}{1-\SYMhitrate}}
+					{(1+\lceil\log_2\SYMcorecount\rceil)+15+\lceil\log_2\SYMcorecount\rceil+\left(\frac{8}{9}\cdot\left(\frac{1}{1-\SYMhitrate}-1\right)\right)}
+			  \cdot \SI{100}{\mega\hertz}\cdot \SYMcorecount \notag\\
+=\;			& \frac	{\frac{8}{9}\cdot\frac{1}{1-\SYMhitrate}}
+					{2\lceil\log_2\SYMcorecount\rceil+\left(\frac{8}{9}\cdot\left(\frac{1}{1-\SYMhitrate}-1\right)\right)+16}
+			  \cdot \SI{100}{\mega\hertz}\cdot \SYMcorecount.
+\end{align}
+Its complexity is bounded by
+\begin{align}
+			& \SYMbound\left(
+			  \frac	{\frac{1}{1-\SYMhitrate}}
+					{\log\SYMcorecount+\frac{1}{1-\SYMhitrate}}
+			  \cdot \SYMcorecount
+			  \right) \notag\\
+=\;			& \SYMbound\left(
+			  \frac	{\SYMcorecount}
+					{(1-\SYMhitrate)\log\SYMcorecount+1}
+			  \right). \label{eq:hardware:cache_bound}
+\end{align}
+
+\Cref{eq:hardware:cache_bound} depends on the number of cores and the cache hit rate.
+It shows that when the every read is a hit, so $\SYMhitrate=$~1, the number of executed instructions scales linearly to the number of cores.
+\Vref{fig:hardware:performance_complexity} visualizes these trends.
+The figure shows both the linear \ix{speedup}, when no cache misses occur and all memory accesses are local, and the trend when we assume that the performance is only bound by the cache hit rate, with infinite memory bandwidth.
+Although the trend that is bounded by the cache hit rate, seems to be linear, \cref{eq:hardware:cache_bound} shows that it is not.
+The relative distance between the two trends is increasing with a larger number of cores, although the impact on the performance only becomes dominant after millions of cores when having a high cache hit rate.
+
+\begin{figure}%
+\inputfig{figures/hw_scaling}%
+\caption{Scaling trends of \Starburst*, at \SI{100}{\mega\hertz}, cache hit rate of $\SYMhitrate=$~\num{.99}, and memory bandwidth of \SI{1.11e7}{reads\per\second}}%
+\label{fig:hardware:performance_complexity}%
+\end{figure}
+
+In practice, the \ix[memory bottleneck]{memory bandwidth} is limited.
+When the number of cores is increased, there is more memory traffic, and the memory controller will saturate at some point.
+Then, the bandwidth of the memory controller determines the maximum number of reads, which is related to the maximum number of executed instructions, given a specific cache hit rate and an instructions--reads ratio.
+So, given a memory bandwidth in terms of number of memory reads, the number of executed instructions of all cores combined can be calculated as
+\begin{align*}
+			& \text{maximum number of memory reads} \cdot \text{instructions per cache miss}			\\
+\eqkindof\;	& \text{memory bandwidth} \cdot \left(\frac{8}{9}\cdot\frac{1}{1-\SYMhitrate}\right).	
+\end{align*}
+The bound by the memory bandwidth depends on both the available memory bandwidth and the cache hit rate.
+The performance does not depend on the number of cores.
+So, when the application is memory bounded, increasing the number of cores does not improve the performance; all cores will be slowed down, which exactly counteracts the increase in raw computing power.
+This bound is also visualized by \cref{fig:hardware:performance_complexity}.
+Obviously, the actual performance of the application is bounded because of both the cache hit rate and the memory bandwidth, of which an indicative dashed line is given in the figure.
+
+%\begin{align*}
+%c &= 1+\text{read instruction ratio} = \left(1+\frac{1}{8}\right) \\
+%\text{reads}	&= \text{instructions} \cdot c \\
+%\SYMhitrate		&= \frac{\text{hits}}{\text{reads}} \\
+%\text{read miss} &= \text{reads}\cdot(1-\SYMhitrate) \\
+%\text{one miss}	&: \text{reads}\cdot(1-\SYMhitrate) = 1\\
+%&\rightarrow \text{reads} = \frac{1}{1-\SYMhitrate} \\
+%&\rightarrow \text{instructions} = \frac{\left(\frac{1}{1-\SYMhitrate}\right)}{c} = \frac{1}{(1-\SYMhitrate)\cdot c} \\
+%\end{align*}
+
+\ix[synchronization]{Synchronization}, as realized by the \ix{distributed lock} algorithm, does not use the arbitration tree.
+It uses message passing over the \ix{ring} instead.
+The ring has a latency of one clock cycle per tile, so it scales \SYMupperbound[\SYMcorecount].
+Let \SYMlocks denote the total amount of locks in the application, then every core serves $\frac{\SYMlocks}{\SYMcorecount}$ locks when the locks are properly balanced over the servers.
+Moreover, every lock has a constant administration overhead, so the required memory is bounded by $\SYMbound\left(\frac{\SYMlocks}{\SYMcorecount}\right)$ per server.
+To process one lock-related message, the latency is bounded by
+\begin{align}
+		& \SYMupperbound\left(
+			\text{ring latency} + \text{\noac{AA}-tree lock administration latency}
+		\right) \notag\\
+=\;		& \SYMupperbound\left(
+			\SYMcorecount + \log\frac{\SYMlocks}{\SYMcorecount}
+		\right).
+\end{align}
+In practice, the latency of the ring is negligible, as a context switch alone to start the message handler requires hundreds of clock cycles, and the uncertainty of a few cache misses mitigates the influence of the ring latency.
+The number of locks, how they are distributed, and their locality depend largely on the application.
+Hence, whether the application scales properly and how it uses the parallelism of the platform to distribute or balance work, cannot be determined in general.
+
+
+\section{Conclusion}
+
+This chapter presented two improvements regarding the interconnect and synchronization.
+Experiments show that by replacing the \ix{connection-oriented} \aethereal* by the \ix{connectionless} \Warpfield* \acix{NoC}, the execution time of a set of \SPLASH* and \PARSEC* benchmark applications is reduced by \SI{27}{\percent} on average, even though the analytically determined worst-case latency bound of the \ac{NoC} increased.
+Using the asymmetric distributed lock instead of a polling-based bakery lock completely eliminated memory traffic for locks, by utilizing a low-cost core-to-core interconnect.
+This gives an additional performance boost of \SI{37}{\percent} on average, which exploits the locality of mutexes.
+
+\Warpfield's hardware costs \ix[scalability]{scale} linearly to the number of cores, and the application's \ix{performance} scales close to linear, assuming a high cache hit rate.
+However, the performance will inevitably be bounded by the \ix{memory bottleneck}, after which the performance does not change anymore when even more cores are added.
+
+With respect to the overview figure \chapfigpageref, these results are the effect of modifications to the platform, which are transparent to the applications.
+The value of these modifications lies in the assumptions made by the programming model: threaded C programs are memory-oriented and hardly constrained in memory access patterns.
+\AEthereal is not tailored to such a specific communication pattern, but focused towards predictability, given an application with \ac{KPN}-like concurrency.
+
+As discussed earlier, \ix{threading} and C is a common approach to programming multiprocessor systems.
+Threading implies using mutexes, which has an associated cost, so high contention on a mutex slows down the application.
+To prevent contention, applications should be designed such that sharing a mutex is kept to a minimum, which results in a high locality of mutexes.
+As the benchmark applications have such high locality, they benefit from the distributed lock.
+As contrasting example, a \ac{KPN}-based program might not use mutexes at all, in favor of \ac{FIFO} channels.
+This shows that the programming model puts a specific stress on aspects of the \ix{platform}---applying the distributed lock algorithm in a platform that only uses \ac{KPN}-based programs, does not improve the performance.
+
+In the case of the distributed lock algorithm, the platform defines that the performance of an application increases when locks have a high locality.
+Hence, the platform associates costs to low-level operations.
+However, only when the programming model can make use of the cheap, \ie efficient, low-level operations, one can speak of an efficient system, otherwise this hardware efficiency is useless.
+In other words, it is the \ix{programming model} that gives a \keyinsight{meaning} to the efficiency of hardware.
+

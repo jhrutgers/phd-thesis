@@ -1,0 +1,104 @@
+\tikzset{
+	cpu label/.style={plot label right,anchor=west,font=\portablefigfontB,outer sep=.1ex,inner sep=0},
+	cpu core label/.style={cpu label,plot label left},
+}%
+\pgfplotsset{
+	width=.525\linewidth,
+	height=.5\linewidth,
+	xlabel={Year of introduction},
+	xtick={1970,1980,...,2010},
+	every axis/.append style={
+		cycle list={
+			{chart color 1,only marks,mark options={scale=.6},mark=*,},
+			{chart color 1,mark=none},
+		},
+	},
+	/pgf/number format/.cd,set thousands separator={},
+}%
+%
+\def\append#1#2{\ifx#1\undefined\def#1{}\fi\expandafter\def\expandafter#1\expandafter{#1#2}}%
+%
+\def\addcpu (#1,#2,#3) +(#4,#5) #6[#7];{%
+	\append\cpucoords{#1 #2 #3 \\ }%
+	\append\cpulabels{\draw (axis cs:#1,#2) -- ++(#4,#5) \plotlabelnode[cpu label,#7]{\strut#6};}%
+	\ifstrempty{#6}{}{%
+		\ifnumgreater{#3}{1}{%
+			\ifnumless{#3}{16}{%
+				\append\cpucorelabels{\draw (axis cs:#1,#3) -- ++(-3ex,2ex) \plotlabelnode[cpu core label]{\strut#6};}}{%
+				\append\cpucorelabels{\draw (axis cs:#1,#3) -- ++(-3ex,0) \plotlabelnode[cpu core label]{\strut#6};}}}{}}%
+}%
+\addcpu (1978,     29000,  1) +(3ex,-1.5ex) {8086}[];%
+\addcpu (1982,     29000,  1) +(0,0) {}[];%{80186}[];%
+\addcpu (1982,    134000,  1) +(0,0) {}[];%{80286}[];%
+\addcpu (1985,    275000,  1) +(1ex,-1ex) {80386DX}[];%
+\addcpu (1989,   1200000,  1) +(0,0) {}[];%{80486DX}[];%
+\addcpu (1993,   3100000,  1) +(1ex,-2ex) {Pentium}[];%
+\addcpu (1995,   5500000,  1) +(0,0) {}[];%{Pentium Pro}[];%
+\addcpu (1997,   4500000,  1) +(0,0) {}[];%{Pentium MMX}[];%
+\addcpu (1997,   7500000,  1) +(-2ex,1ex) {Pentium~\Rmnum{2}}[plot label left];%
+\addcpu (1998,   7500000,  1) +(0,0) {}[];%{Celeron (Covington)}[];%
+\addcpu (1998,  19000000,  1) +(0,0) {}[];%{Celeron (Mendocino)}[];%
+\addcpu (1999,   9500000,  1) +(0,0) {}[];%{Pentium III (Katmai)}[];%
+\addcpu (1999,  28100000,  1) +(0,0) {}[];%{Pentium III (Coppermine)}[];%
+\addcpu (2000,  42000000,  1) +(2ex,-1ex) {Pentium~4}[];%
+\addcpu (2000,  55000000,  1) +(0,0) {}[];%{Pentium 4(Northwood A)}[];%
+\addcpu (2003,  77000000,  1) +(0,0) {}[];%{Pentium M (Banias)}[];%
+\addcpu (2003, 140000000,  1) +(0,0) {}[];%{Pentium M (Dothan)}[];%
+\addcpu (2005, 230000000,  2) +(0,0) {}[];%{Pentium D (Smithfield)}[];%
+\addcpu (2006, 376000000,  2) +(0,0) {}[];%{Pentium D (Presler)}[];%
+\addcpu (2006, 291000000,  2) +(-2ex,0) {Core~2 (Conroe)}[plot label left];%
+\addcpu (2006, 167000000,  2) +(0,0) {}[];%{Core 2 (Allendale)}[];%
+\addcpu (2006, 586000000,  2) +(0,0) {}[];%{Core 2 (Kentsfield)}[];%
+\addcpu (2007, 586000000,  4) +(0,0) {}[];%{Core 2 (Yorkfield)}[];%
+\addcpu (2008, 781000000,  4) +(0,0) {}[];%{Core i7 (Nehalem)}[anchor=east];%
+\addcpu (2011, 995000000,  4) +(0,0) {}[];%{Core i7 (Sandy Bridge)}[];%
+\addcpu (2011,2270000000,  8) +(-3ex,0) {Core~i7 (Sandy Bridge-E)}[plot label left];%
+\addcpu (2012,1400000000, 12) +(0,0) {}[];%{Xeon E5 v2}[plot label left];%
+%
+\addcpu (2010,1300000000, 48) +(0,-2ex) {\noac{SCC}}[anchor=north west];%
+\addcpu (2012,5000000000, 62) +(-2ex,1ex) {Xeon Phi}[plot label left];%
+%
+\def\pgfplotstablereadcmd{\pgfplotstableread[row sep=\\]}%
+\expandafter\pgfplotstablereadcmd\expandafter{\cpucoords}\cputable%
+%
+\subbottom{%
+\begin{tikzpicture}
+\begin{semilogyaxis}[
+	ylabel={\strut Transistors},
+	grid=major,
+	major x grid style={draw=none},
+	max space between ticks=20,
+	minor tick style={draw=none},
+	enlarge y limits={value=0.1,auto},
+	enlarge x limits={value=0.05,auto},
+]
+	\addplot table[x index=0,y index=1] {\cputable};
+%
+	\pgfplotstablecreatecol[linear regression={ymode=log,x=0,y=1}]{regression}{\cputable}
+	\xdef\slope{\pgfplotstableregressiona} % save the slope parameter
+	\xdef\intercept{\pgfplotstableregressionb} % save the intercept parameter
+	\addplot plot[domain=1977:2013] (\x,{exp(\intercept+\slope*\x)});
+%
+	\cpulabels
+\end{semilogyaxis}
+\end{tikzpicture}%
+}\hfill%
+\subbottom{%
+\begin{tikzpicture}
+\begin{axis}[
+	ylabel={\strut Cores per die},
+	ylabel style={yshift=-1.5ex},% I don't understand why this is line is needed
+	ytick={0,16,32,48,64},
+	extra y ticks={1,2,4,8,24,40,56},
+	extra y tick labels={},
+	ymin=0,
+	grid=major,
+	major x grid style={draw=none},
+	enlarge y limits=upper,
+	enlarge x limits=true,
+]
+	\addplot table[x index=0,y index=2] {\cputable};
+	\cpucorelabels
+\end{axis}
+\end{tikzpicture}%
+}%

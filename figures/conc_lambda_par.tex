@@ -1,0 +1,92 @@
+\begin{tikzpicture}
+\input{figures/conc_lambda_style}
+\appto\defaultevalinit{
+	\addstatic[static fun] (main) {\thefunc{main}};
+	\addstatic[static fun] (inc) {\thefunc{inc}};
+	\addstatic[static const] (c5) {$5$};
+	\addstatic[static fun] (par) {\thefunc{par}};
+	\addstatic[static fun] (add) {$+$};
+	\addstatic[static const] (c1) {$1$};
+}
+
+\begin{evalstep}[]{$2:$~before reduction of \thefunc{par}}
+	\addheap[heap app] (app1) {\lapply{\thefunc{inc}}{5}};
+	\setptr[] (app1.180) (inc.350);
+	\setptr[] (app1.175) (c5.350);
+	\addheap[heap app] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app2.180) (inc.0);
+	\setptr[] ($(app2.west)+(1ex,-.5ex)$) ($(app1.west)+(1ex,0)$);
+	\addheap[heap app] (app3) {\lapply{\thefunc{par}}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app3.180) (par.350);
+	\setptr[] ($(app3.west)+(2ex,-.5ex)$) ($(app1.west)+(2ex,0)$);
+	\addheap[heap app] (app4) {\lapply{\lappref{(\thefunc{par})\ldots}}{\lappref{(\thefunc{inc})\ldots}}};
+	\setptr[] ($(app4.west)+(1ex,-.75ex)$) ($(app2.west)+(1ex,.5ex)$);
+	\setptr[] ($(app4.west)+(2ex,-.75ex)$) ($(app3.west)+(2ex,.5ex)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.west) (app4.east);
+	\addstack[stack var] (a) {$a$};
+	\setptr[] (a.west) (app1.east);
+\end{evalstep}
+
+\begin{evalstep}[xshift=19em]{$3:$~after reduction of \thefunc{par}}
+	\addheap[heap app,dead] (app1) {\lapply{\thefunc{inc}}{5}};
+	\addheap[heap app] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app2.180) (inc.0);
+	\addheap[heap app,dead] (app3) {\lapply{\thefunc{par}}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app3.180) (par.350);
+	\setptr[] ($(app3.west)+(2ex,-.5ex)$) ($(app1.west)+(2ex,0)$);
+	\addheap[heap app,dead] (app4) {\lapply{\lappref{(\thefunc{par})\ldots}}{\lappref{(\thefunc{inc})\ldots}}};
+	\setindir[] ($(app4.east)+(-1ex,-.75ex)$) ($(app2.east)+(-1ex,-.5ex)$);
+	\addheap[heap app,global] (app5) {\lapply{\thefunc{inc}}{5}};
+	\setptr[] (app5.185) (inc.5);
+	\setptr[] (app5.180) (c5.0);
+	\setindir[] ($(app1.east)+(-1.5ex,0)$) ($(app5.east)+(-1.5ex,0)$);
+	\setptr[] ($(app2.west)+(1ex,0)$) ($(app5.west)+(1ex,0)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.west) (app2.east);
+\end{evalstep}
+
+\begin{evalstep}[yshift=-19em]{$4:$~reduction of outer \thefunc{inc}}
+	\addheap[heap app,dead] (app1) {\lapply{\thefunc{inc}}{5}};
+	\addheap[heap app,dead] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+	\addheap[heap app,dead] (app3) {\lapply{\thefunc{par}}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app3.180) (par.350);
+	\setptr[] ($(app3.west)+(2ex,-.5ex)$) ($(app1.west)+(2ex,0)$);
+	\addheap[heap app,dead] (app4) {\lapply{\lappref{(\thefunc{par})\ldots}}{\lappref{(\thefunc{inc})\ldots}}};
+	\setindir[] ($(app4.east)+(-1ex,-.75ex)$) ($(app2.east)+(-1ex,-.5ex)$);
+	\begin{pgfonlayer}{foreground}
+	\addheap[heap app,global] (app5) {\lapply{\thefunc{inc}}{5}};
+	\end{pgfonlayer}
+%	\setptr[] (app5.185) (inc.5);
+%	\setptr[] (app5.180) (c5.0);
+	\setindir[] ($(app1.east)+(-1.5ex,0)$) ($(app5.east)+(-1.5ex,0)$);
+	\addheap[heap app] (app6) {\lapply{+}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app6.180) (add.0);
+	\setptr[] ($(app6.west)+(1ex,-.5ex)$) ($(app5.west)+(1ex,0)$);
+	\addheap[heap app] (app7) {\lapply{\lappref{(+)\ldots}}{1}};
+	\setptr[] ($(app7.west)+(1ex,0)$) ($(app6.west)+(1ex,.5ex)$);
+	\setptr[] (app7.180) (c1.0);
+	\setindir[] ($(app2.east)+(-2ex,1ex)$) ($(app7.east)+(-2ex,-.5ex)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.west) (app7.east);
+\end{evalstep}
+
+\def\defaultevalinit{
+	\initheap[at={(-2.25em,0)}];
+	\initstack[at={(4.5em,0)}];
+}
+\begin{evalstep}[yshift=-19em,xshift=19em]{another worker picks up $\thefunc{inc}\;5$}
+	\addheap[heap app,dead] (app1) {\lapply{+}{5}};
+	\addheap[heap app,dead] (app2) {\lapply{\lappref{(+)\;(5)}}{1}};
+	\addheap[heap const,global] (c6) {$6$};
+	\setindir[] ($(app2.east)+(-1ex,0)$) ($(c6.east)+(-1ex,0)$);
+
+	\addstack[stack var] (start) {start};
+	\setptr[bend right=60,in=210,looseness=1] (start.90) (app5.5);
+	\setindir[] (app5.355) (c6.180);
+\end{evalstep}
+
+\end{tikzpicture}%

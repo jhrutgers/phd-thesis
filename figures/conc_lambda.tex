@@ -1,0 +1,140 @@
+\begin{tikzpicture}
+\input{figures/conc_lambda_style}
+\appto\defaultevalinit{
+	\addstatic[static fun] (main) {\thefunc{main}};
+	\addstatic[static fun] (inc) {\thefunc{inc}};
+	\addstatic[static const] (c5) {$5$};
+	\addstatic[static fun] (add) {$+$};
+	\addstatic[static const] (c1) {$1$};
+}
+
+\begin{evalstep}[]{$1:$~start}
+	\addstack[stack var] (root) {root};
+	\setptr[] (root) (main);
+\end{evalstep}
+
+\begin{evalstep}[xshift=19em]{$2:$~after reduction of \thefunc{main}}
+	\addheap[heap app] (app1) {\lapply{\thefunc{inc}}{5}};
+	\setptr[] (app1.180) (inc.350);
+	\setptr[] (app1.175) (c5.350);
+	\addheap[heap app] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app2) (inc);
+	\setptr[] ($(app2.west)+(1ex,0)$) ($(app1.west)+(1ex,0)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.180) (app2.0);
+%	\addstack[stack var] (a) {$a$};
+%	\setptr[] (a.180) (app1.0);
+\end{evalstep}
+
+\begin{evalstep}[yshift=-18em]{$3:$~after reduction of outer \thefunc{inc}}
+	\addheap[heap app] (app1) {\lapply{\thefunc{inc}}{5}};
+	\setptr[] (app1.180) (inc.350);
+	\setptr[] (app1.175) (c5.350);
+	\addheap[heap app,dead] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+%	\setptr[] (app2) (inc);
+%	\setptr[] ($(app2.west)+(1ex,0)$) ($(app1.west)+(1ex,0)$);
+	\addheap[heap app] (app3) {\lapply{+}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app3.175) (add.350);
+	\setptr[] ($(app3.west)+(2ex,-.5ex)$) ($(app1.west)+(2ex,.5ex)$);
+	\addheap[heap app] (app4) {\lapply{\lappref{(+)\ldots}}{1}};
+	\setptr[] ($(app4.west)+(1ex,0)$) ($(app3.west)+(1ex,0)$);
+	\setptr[] (app4.175) (c1.350);
+	\setindir[] ($(app2.east)+(-1ex,0)$) ($(app4.east)+(-1ex,0)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.180) (app4.0);
+\end{evalstep}
+
+\begin{evalstep}[yshift=-18em,xshift=19em]{$4:$~after reduction of inner \thefunc{inc}}
+	\addheap[heap app,dead] (app1) {\lapply{\thefunc{inc}}{5}};
+%	\setptr[] (app1.180) (inc.350);
+%	\setptr[] (app1.170) (c5.350);
+	\addheap[heap app,dead] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+%	\setptr[] (app2) (inc);
+%	\setptr[] ($(app2.west)+(1ex,0)$) ($(app1.west)+(1ex,0)$);
+	\addheap[heap app] (app3) {\lapply{+}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app3.175) (add.350);
+%	\setptr[] ($(app3.west)+(2ex,-.5ex)$) ($(app1.west)+(2ex,.5ex)$);
+	\addheap[heap app] (app4) {\lapply{\lappref{(+)\ldots}}{1}};
+	\setptr[] ($(app4.west)+(1ex,0)$) ($(app3.west)+(1ex,0)$);
+	\setptr[] (app4.175) (c1.350);
+	\setindir[] ($(app2.east)+(-1ex,0)$) ($(app4.east)+(-1ex,0)$);
+	\addheap[heap app] (app5) {\lapply{+}{5}};
+	\setptr[] (app5.180) (add.10);
+	\setptr[] (app5.185) (c5.10);
+	\addheap[heap app] (app6) {\lapply{\lappref{(+)\;(5)}}{1}};
+	\setptr[] ($(app6.west)+(1ex,0)$) ($(app5.west)+(1ex,0)$);
+	\setptr[] (app6.185) (c1.10);
+	\setindir[] ($(app1.east)+(-1.5ex,0)$) ($(app6.east)+(-1.5ex,-.5ex)$);
+	\setptr[] ($(app3.west)+(2ex,0)$) ($(app6.west)+(2ex,0)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.west) (app4.east);
+	\addstack[stack var] (arg) {arg};
+	\setptr[] (arg.west) (app6.east);
+\end{evalstep}
+
+\begin{evalstep}[yshift=-40em]{$5:$~after first addition}
+	\addheap[heap app,dead] (app1) {\lapply{\thefunc{inc}}{5}};
+%	\setptr[] (app1.180) (inc.350);
+%	\setptr[] (app1.170) (c5.350);
+	\addheap[heap app,dead] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+%	\setptr[] (app2) (inc);
+%	\setptr[] ($(app2.west)+(1ex,0)$) ($(app1.west)+(1ex,0)$);
+	\addheap[heap app] (app3) {\lapply{+}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app3.175) (add.350);
+%	\setptr[] ($(app3.west)+(2ex,-.5ex)$) ($(app1.west)+(2ex,.5ex)$);
+	\addheap[heap app] (app4) {\lapply{\lappref{(+)\ldots}}{1}};
+	\setptr[] ($(app4.west)+(1ex,0)$) ($(app3.west)+(1ex,0)$);
+	\setptr[] (app4.175) (c1.350);
+	\setindir[] ($(app2.east)+(-1ex,0)$) ($(app4.east)+(-1ex,0)$);
+	\addheap[heap app,dead] (app5) {\lapply{+}{5}};
+	\setptr[] (app5.180) (add.10);
+	\setptr[] (app5.185) (c5.10);
+	\addheap[heap app,dead] (app6) {\lapply{\lappref{(+)\;(5)}}{1}};
+%	\setptr[] ($(app6.west)+(1ex,0)$) ($(app5.west)+(1ex,0)$);
+%	\setptr[] (app6.190) (c1.10);
+	\setindir[] ($(app1.east)+(-1.5ex,0)$) ($(app6.east)+(-1.5ex,-.5ex)$);
+%	\setptr[] ($(app3.west)+(2ex,0)$) ($(app6.west)+(2ex,0)$);
+	\addheap[heap const] (c6) {$6$};
+	\setindir[] ($(app6.east)+(-1ex,0)$) ($(c6.east)+(-1ex,0)$);
+	\setptr[] ($(app3.west)+(2ex,0)$) ($(c6.west)+(2ex,0)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.west) (app4.east);
+\end{evalstep}
+
+\begin{evalstep}[yshift=-40em,xshift=19em]{$6:$~after second addition}
+	\addheap[heap app,dead] (app1) {\lapply{\thefunc{inc}}{5}};
+%	\setptr[] (app1.180) (inc.350);
+%	\setptr[] (app1.170) (c5.350);
+	\addheap[heap app,dead] (app2) {\lapply{\thefunc{inc}}{\lappref{(\thefunc{inc})\;(5)}}};
+%	\setptr[] (app2) (inc);
+%	\setptr[] ($(app2.west)+(1ex,0)$) ($(app1.west)+(1ex,0)$);
+	\addheap[heap app,dead] (app3) {\lapply{+}{\lappref{(\thefunc{inc})\;(5)}}};
+	\setptr[] (app3.175) (add.350);
+%	\setptr[] ($(app3.west)+(2ex,-.5ex)$) ($(app1.west)+(2ex,.5ex)$);
+	\addheap[heap app,dead] (app4) {\lapply{\lappref{(+)\ldots}}{1}};
+%	\setptr[] ($(app4.west)+(1ex,0)$) ($(app3.west)+(1ex,0)$);
+%	\setptr[] (app4.170) (c1.350);
+	\setindir[] ($(app2.east)+(-1ex,0)$) ($(app4.east)+(-1ex,0)$);
+	\addheap[heap app,dead] (app5) {\lapply{+}{5}};
+	\setptr[] (app5.180) (add.10);
+	\setptr[] (app5.185) (c5.10);
+	\addheap[heap app,dead] (app6) {\lapply{\lappref{(+)\;(5)}}{1}};
+%	\setptr[] ($(app6.west)+(1ex,0)$) ($(app5.west)+(1ex,0)$);
+%	\setptr[] (app6.190) (c1.10);
+	\setindir[] ($(app1.east)+(-1.5ex,0)$) ($(app6.east)+(-1.5ex,-.5ex)$);
+%	\setptr[] ($(app3.west)+(2ex,0)$) ($(app6.west)+(2ex,0)$);
+	\addheap[heap const,dead] (c6) {$6$};
+	\setindir[] ($(app6.east)+(-1ex,0)$) ($(c6.east)+(-1ex,0)$);
+	\setptr[] ($(app3.west)+(2ex,0)$) ($(c6.west)+(2ex,0)$);
+	\addheap[heap const] (c7) {$7$};
+	\setindir[] ($(app4.east)+(-2ex,.5ex)$) ($(c7.east)+(-2ex,0)$);
+
+	\addstack[stack var] (root) {root};
+	\setptr[] (root.west) (c7.east);
+\end{evalstep}
+
+\end{tikzpicture}%

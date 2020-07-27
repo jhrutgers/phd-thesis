@@ -1,0 +1,606 @@
+\begin{chapterfig}[\Cref{c:progmodel}]
+\label{fig:progmodel:overview}
+\label{fig:progmodel:platform}
+\setlength{\platformlayerwidth}{50ex}
+\platformlayer[padded]						(app)	{
+	\RaggedRight application};
+\platformlayer[model,padded]				(pm)	{
+	\RaggedRight\emph{programming model}\\
+	machine abstraction + programming paradigm(s)};
+\platformlayer[model,padded]				(moc)	{
+	\RaggedRight\emph{model of computation}\\
+	\eg, $\uppi$- and \lcalc, register machine};
+\platformlayerglue[padded]					()		{
+	\RaggedRight\emph{glue tooling:}
+	concurrency extraction/annotation\\
+	\eg, \acs{GHC}, \texttt{pn}+\textsc{Espam}};
+\platformlayer[model,padded]				(cm)	{
+	\RaggedRight\emph{concurrency model}\\
+	\eg, \acs{KPN}, Pthread, \acs{RPC}, MapReduce};
+\platformlayerglue[padded]					()		{
+	\RaggedRight\emph{glue tooling:}
+	controlling low-level hardware-\\specific memory and communication details\\
+	\eg, \acs{OS}, \acl{RTS}, \thecmd{gcc}};
+\platformlayer[model,padded]				(mm)	{
+	\RaggedRight\emph{memory model}\\
+	\eg, sequential, release, entry consistency};
+\platformlayer[padded,minimum height=3.25em] (hw)	{
+	\RaggedRight actual hardware\\
+	\acs{NUMA} \acl{DSM} many-core};
+\crosslayerright[] <moc.north east->		()		{platform};
+\crosslayerleft[] <app.north west-mm.west>	() 		{software layers};
+\crosslayerleft[] <mm.west->				() 		{hardware};
+\flapideapadded[] <pm-mm>;
+\end{chapterfig}
+
+\setaachaptext[60]{the platform model overview chapter}
+\chapter{Platforms and Programming Abstraction}%{Programmable Platform}
+\label{c:progmodel}
+
+\begin{abstract}%
+A many-core platform inherently needs concurrency.
+This property has a major influence on how it should be programmed.
+Because of parallelism in the execution, several models become prominent:
+the behavior of the (distributed) memory determines how communication is realized, as defined by the memory model;
+the concurrency model defines composition and interaction of concurrent computation;
+and the model of computation defines the fundamentals of the algorithm.
+
+Taking full control over all details of these models is almost impossible for the programmer to do by hand.
+A programming model presents all layers of the underlying platform in a convenient way.
+Different programming languages make different trade-offs for this model regarding the level of abstraction, ease of programming, and control over the hardware.
+\end{abstract}
+
+\Cref{c:introduction} discussed the relevance of programming for concurrency, and mentioned the necessity of abstraction.
+Concrete architectures were discussed in \cref{c:trends}.
+As stated before, all these architectures can be programmed using C.
+Apparently, the architectures can be abstracted in such a way that a single programming language is suitable to be used on all of them.
+This chapter will discuss the abstractions of `programming' and their relation.
+%During this discussion, the rationale for the overview figure \chapfigpageref will be explained.
+
+Consider the example program in C pseudo-code of two parallel executing processes in \vref{fig:progmodel:polling}.
+The intention is to communicate the value 42 from process~2 to 1.
+The variable \lstinline|flag| is used to synchronize the processes and to signal that \lstinline|X| has been written.
+Although this code looks fine at first glance, many assumptions are made, based on the idea the programmer has about the machine.
+The way of thinking about the machine depends on many abstract models, which are briefly discussed next and defined in subsequent sections.
+
+\begin{parcodes}%
+\begin{parcode}{.4\linewidth}%
+\begin{lstcode}[variable={flag,r1,X}]
+flag = 0;$\label{l:progmodel:flag0}$
+while(flag!=1) {}$\label{l:progmodel:flagpoll}$
+r1 = X;
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{.4\linewidth}%
+\begin{lstcode}[variable={flag,X}]
+X = 42;$\label{l:progmodel:wrx}$
+flag = 1;$\label{l:progmodel:wrf}$
+\end{lstcode}%
+\end{parcode}%
+\caption{Polling a flag}%
+\label{fig:progmodel:polling}%
+\end{parcodes}
+
+There is a notion of the abstract machine.
+In this case, it is a parallel machine, which allows executing two independent processes.
+Every process is a sequence of steps, and every step modifies the state of the machine.
+Which kind of steps are allowed and how they contribute to the result is defined by the \emph{model of computation}.
+
+In this example, multiprocessing, \ie threading, is used to deal with concurrency.
+Processes can access the same variables, and use a central shared memory to communicate data.
+This is in contrast to a dataflow machine, which communicates via \acp{FIFO}.
+How concurrent composition and interaction is defined, is part of the \emph{concurrency model}.
+
+The example uses variables, which are shared between processes.
+In C, one often assumes that writes of variables are executed atomically and instantly.
+However, as processes can be executed on physically separated processors, updates might take some time to propagate through the system.
+The behavior of the memory subsystem is captured by the \emph{memory model}.
+
+As we will see in a moment, these models are often not completely independent.
+Moreover, hardware architectures have a greater influence on how software uses memory models than on what programming paradigm should be use.
+So, there is an order in which the actual hardware determines the freedom of choice by the application (programmer).
+We will discuss the models in this increasing order of freedom.
+The figure \chapfigpageref visualize the organization of the models as a stack, having the hardware at the bottom.
+In the course of this chapter, this organization is explained, combined with definitions of the models, and a discussion of the layers in between.
+
+
+\section{Many-core hardware is the driving force}
+\label{s:progmodel:hardware}
+
+The stack of models has two ends: the hardware and the application.
+There is a trade-off what can be done in hardware, and what can be done in software (as part of the application).
+One extreme is to do everything in hardware; this is an \ac{ASIC}.
+The other extreme is to do everything\footnote{%
+	In contrast to \acp{ASIC}, which are hardware without software, software cannot run without hardware.
+	Even in virtual environments, there is some piece of hardware executing the software in the end.
+	What the fundamentally minimal required hardware is, remains an open discussion.
+} in software.
+One can imagine that this involves that software controls low-level events, like bus arbitration, \ac{NoC} routing protocols, and keeping track of the required refresh cycles of \ac{DRAM}.
+
+In common systems, programming is made relatively easy, at the expense of hardware complexity.
+To this extent, hardware implements floating-point arithmetic, cache coherency, arbitration on shared memory, atomicity of state changes, and support for synchronization and context switching.
+All of this can be done in software, but is easier and faster in hardware.
+It should be clear that hardware is bound to physical properties and fundamental limits, where software is an abstraction that can be changed freely.
+Fundamental boundaries of the hardware are approaching, as the energy consumption is limited by heat dissipation, data movement at high clock frequencies by the speed of light, and transistor size by the size of atoms.
+Trying to match the hardware architecture to what is convenient to have in software, is becoming harder than matching the software model to the hardware properties.
+
+To be concrete, the most likely usage of the additional transistors is to increase the number of cores---as discussed in \cref{c:introduction}.
+So, the hardware architecture determines the need of concurrent programming.
+Although this complicates programming, this has been accepted as a change in the programming model.
+The trends in \ix{many-core} architectures, as of \cref{c:trends}, also drive changes in programming; a weaker memory model or the lack of cache coherency strongly influences programming such architectures.
+Therefore, the hardware is the most influential layer in how a multiprocessor system can be programmed.
+What is possible to realize in hardware influences how abstraction layers on top of it can be defined.
+
+The trends in hardware force us towards concurrent many-core programming, even though software becomes inherently complex because of it.
+This yields two important questions:
+how do calculations by all individual cores contribute to the overall computational problem, and
+how do they communicate intermediate results?
+Choices about the latter are solely determined by the hardware at hand, and the former is mostly a software choice about how \ix{concurrency} is organized.
+As the memory model defines how communication of data (via memory) behaves, it is more closely related to the hardware, and therefore lower in the stack of models.
+We will discuss the memory model next.
+How concurrency is modeled is discussed in \cref{s:progmodel:concurrency}.
+
+
+\section{Memory model---the hardware's contract}
+\label{s:progmodel:memory}
+
+Cores in a many-core \ac{DSM} architecture communicate via shared memory.
+Since the memory is usually an off-chip \ac{DDR} memory bank, transactions take time to complete.
+The combination of parallelism and transaction latency makes it hard to define a proper state of the system, as there does not have to be an ordering relation between multiple events, \ie transactions.
+Which ordering is defined, and therefore, how the memory behaves, is part of the memory model~\cite{culler:comp_arch,adve:rethinking}:
+\begin{describe}{memory (consistency) model}
+	An abstraction that defines the constraints on the order in which memory operations must appear to be performed, \ie become visible to the processors, with respect to one another.
+	It defines the semantics of shared variables.
+\end{describe}
+
+Consider the example of \vref{fig:progmodel:polling}.
+In this example, there are two shared variables, namely \lstinline|flag| and \lstinline|X|.
+Two different types of memory operations are applied on them: reads and writes.
+The definition of the memory model states that constraints are defined.
+An example of such a constraint is: ``Writes of one process keep their order.''
+So, the writes at \cref{l:progmodel:wrx,l:progmodel:wrf} are observed to be in that specific order, by all processes.
+Based on the guarantees that can be inferred from this constraint, synchronization can be implemented by polling the \lstinline|flag|, as shown in the example.
+Although this might sound trivial, this has an impact on the hardware that implements these constraints.
+For example, if a \ndim{2}-mesh \ac{NoC} has multiple routes from a core to memory, it still has to guarantee that the first write arrives at the memory before the second write.
+
+Different memory models define a different set of constraints.
+Extreme examples of memory models are \acl{AC}, which specifies that all operations occur instantly in a globally observable total order, and \SlowC, which does not define any constraint, except that only the data dependencies locally to the executing core are preserved.
+Notably, the \acixmc{SC}~\cite{lamport:sequential_consistency} model is often used as the reference model.
+\Ac{SC} states that all operations are observed to all processes as if they were executed by a single process.
+Informally, this is the `natural' view on memory: all reads and writes behave as one would expect intuitively how a single memory would behave.
+Hence, it is easy to understand and therefore preferable to implement~\cite{hill:simple_memmodel}.
+A model that prescribes many constraints is often characterized as a \emph{\ix[strong memory model]{strong}} or strict model, opposed to \emph{\ix[weak memory model]{weak}} or relaxed models, which enforce less ordering and therefore allow more non-determinism~\cite{mosberger:memory_models,steinke:unified}.
+\Cref{c:memory} discusses memory models in depth.
+
+The memory model can be seen as a contract between hardware and software.
+Software relies on the semantics of the memory as defined by the model, and the hardware implements that model.
+Hence, \emph{all} hardware components are subject to the memory model, not only the memory and the interconnect.
+Even the core itself is relevant, when it exhibits out-of-order execution, for example.
+In that case, the two writes are initiated in the order as prescribed from process~2's perspective.
+However, out-of-order execution might result in writing \lstinline|flag| to background memory first, so process~1 can observe these write operations in reversed order.
+
+`All hardware components' also include caches, although \ix{cache coherency} is generally considered to be a separate problem.
+Caches influence the behavior of memory operations, just like the interconnect.
+Therefore, it should not be the case that the cache coherency protocol \emph{determines} the multiprocessor consistency model, as stated by \citet{stenstrom:cache_coherency}.
+Instead, the coherency protocol should \emph{follow} or implement the requirements that are imposed by the intended memory model of the architecture\footnote{%
+	This relation between consistency and coherency does not necessarily make coherency protocols easier to implement.}.
+
+Most architectures of \cref{c:trends} have caches.
+A strong memory model, which might define a constraint such as: ``All writes to the same (shared) variable must be in total order'', is hard to realize by a cache coherency protocol.
+Consider the case where two cores---separated by a multi-hop \ac{NoC}---write to the same variable at exactly the same time.
+Then, a total order cannot easily be enforced, as updates propagate slowly through the system.
+As a result, architectures use a weaker model~\cite{adve:rethinking}, such that the hardware complexity is reduced, and the system is more scalable regarding the number of cores.
+This corresponds to the trend as observed in \cref{s:trends:memory}.
+
+At application level, it is convenient to have a strong memory model.
+When the memory model that is implemented by the hardware, is weaker than required, software can \emph{complement} the hardware's memory model.
+This is the case for software cache coherency; when caches are not kept coherent in hardware, software can take over the coherency protocol to realize it at a higher level.
+To this extent, the hardware should, for example, have support for cache flush instructions---to realize software cache coherency properly, \codesign* is required to match memory model requirements of the application and the features of the hardware.
+This is also worked out in detail in \cref{c:memory}.
+
+
+\section{A concurrency model to orchestrate interaction}
+\label{s:progmodel:concurrency}
+
+To utilize the computational capabilities of a parallel machine, the software has to use some form of \ix{concurrency}.
+How concurrency can be achieved, is defined by the \emph{concurrency model}.
+Although literature does not properly define such a model, we use the following explanation:
+\begin{describe}{concurrency model}
+	An abstraction that specifies how computation is decomposed into concurrent components, and defines rules for interaction between them.
+\end{describe}
+
+\ix[threading]{Threading} is probably the best-known concurrency model.
+A concrete threading model is \ix{Pthread}~\cite{Pthread}, which clearly defines decomposition in terms of threads, and interaction in terms of shared memory that is synchronized by using a lock, condition, or barrier.
+Pthread does not enforce how the computation itself is done by a thread, and leaves freedom in the underlying memory model.
+The synchronization primitives allow a translation to practically any memory model, by a compiler or a library.
+Although Pthread can be considered as a concurrency model, it does, however, put some restrictions on the memory model.
+For example, it has to have a shared address space, and cannot be used upon a message-passing architecture that does not have global memory addresses.
+This exemplifies that this specific concurrency model has influence on the choice of a memory model.
+
+\glsreset{KPN}
+A \acix{KPN}~\cite{kahn:kpn} can also be considered as a concurrency model.
+In its original form, it is based on sequential processes written in Algol, extended with functions to send and receive data via unbounded \ac{FIFO} channels.
+There is no notion of memory addresses.
+As a result, any underlying (shared) memory model can be used, as long as \ac{FIFO} channels can be modeled upon it.
+\Citeauthor{kahn:kpn} describes a \ac{KPN} as a parallel programming language, but mostly focuses on how these processes interact in terms of abstract functions and their input--output relation, regardless of scheduling.
+The \ac{KPN} formalism does not include the semantics of what happens inside a `computing station', and only defines program structure, communication channels, and synchronization.
+This also holds for \ac{KPN} derivatives, like dataflow, \acs{SDF}, and \acs{CSDF}.
+As the actual computation is not part of the formalism, a \ac{KPN} and its derivatives cannot be considered as a model of computation.
+This conclusion does not match dataflow literature~\cite{lee:dataflow}.
+
+Another example of a concurrency model is \ix{MapReduce}~\cite{dean:map_reduce}.
+It defines that a (very large) data set is split in chunks, a function is mapped upon all of them, and the intermediate results are combined into a smaller set of output data.
+Because the computation during every individual map and reduction function is limited to a small chunk of data, locality is easily exploited, and concurrency is realized.
+This makes the model appropriate for large (distributed) data centers.
+\Citet{dean:map_reduce} claim that MapReduce is a programming model, but as the model, like \ac{KPN}, focuses on (de)composition of data and tasks and does not define computation itself, it fits our definition of a concurrency model better.
+In contrast to Pthread, MapReduce does not assume shared memory, which makes it independent of the underlying memory architecture.
+
+\glsreset{RPC}
+\glsreset{ILP}
+Many other concurrency models exist.
+One can think of a \ac{RPC} as a way to exploit concurrency in a client--server setup of multiple computers.
+Furthermore, function offloading can be used to utilize accelerators within a \acl{SoC}.
+Moreover, \ac{ILP} transparently uses parallel components within a core or \ac{ALU}.
+Also, a systolic array and vector processing in a \ac{SIMD} processor or \ac{GPU} are classified as concurrency models.
+
+In the example in the beginning of this chapter, threading is assumed as concurrency model.
+A part of the model is that progress of the threads is not guaranteed; process~2 might finish before process~1 even starts.
+Because of this, there exists a race condition: if the write at \cref{l:progmodel:wrf} is executed before \cref{l:progmodel:flag0}, the synchronization fails.
+Such a non-determinism in the order of execution gives freedom in the implementation of the hardware, but makes debugging hard.
+
+In contrast to the memory model, how concurrency is organized is more or less a software view on the parallel hardware.
+For example, multithreading and processes are software concepts and are handled by the operating system, with help of the underlying hardware.
+When the underlying hardware is a shared-memory architecture, all communication patterns can be realized---although the efficiency can differ.
+This makes the concurrency model independent of the implemented memory model.
+Therefore, it is higher in the stack of models, as depicted by the overview figure \chapfigpageref.
+
+The transformation of the concurrency model into something that is runnable on hardware, can be done by either run-time or compile-time software.
+For example, the \acl{OS} dynamically handles context switching between processes.
+Moreover, worker threads schedule tasks of Apple's Grand Central Dispatch~\cite{apple:gcd} or sparks of Haskell.
+An assembler can make decisions about insertion of fence instructions when data is communicated, depending on the actual memory model.
+For a \ac{KPN}, the channel implementation could control cache coherency, when appropriate.
+Everything that implements the concurrency model on top of the architecture is \emph{\ix{glue tooling}}.
+
+
+\section{Computation and algorithms}
+
+The concurrency model defines the interaction of components that compute, but it is undefined how computation itself is realized.
+For this purpose, we need a \emph{model of computation}\footnote{%
+	A model of computation should not be confused with a \emph{computational model}.
+	The latter is a (mathematical) model of a complex system, which is used in a simulation environment.
+	Just an example for clarification: the computational model of the weather is used for rain and temperature predictions.
+}.
+
+This term, however, is often used without a proper definition.
+In the Ptolemy~\Rmnum{2}~\cite{ptolemy2} project, models of computation are evaluated.
+The project defines such a model as ``the rules that govern the interaction, communication, and control flow of a set of components''.
+However, this definition lacks how `computation' is realized, and matches our definition of a concurrency model better.
+\Citet{skillicorn:models} give the following definition: ``A model of (parallel) computation is an abstract machine providing certain operations to the programming level above and requiring implementations for each of these operations on all of the architectures below.''
+Programming is included in this definition, but a programming model is fundamentally different view on the abstract machine, as we will see in \cref{s:progmodel:programming}.
+Finally, Wikipedia states: ``A model of computation is the definition of the set of allowable operations used in computation and their respective costs.''
+We use the following definition:
+\begin{describe}{model of computation}
+	An abstraction that defines the elementary operations, \ie transformations, for computation.
+	Such a model allows expressing algorithms, which are sets of transformations, and data, which is used to apply algorithms on.
+\end{describe}
+
+A \ix{Turing machine} is a well-known model of computation.
+In such a machine, a computational problem is formulated by the state table (the algorithm), and a sequence of symbols on the tape (the input data).
+\Vref{fig:progmodel:tm_adder} depicts a very simple algorithm that adds two numbers, which are coded as the length of a sequence of 1's.
+The input is a tape with two numbers, 2 and 3 in this example, separated by a 0.
+When the machine halts, the result is on the tape.
+
+\begin{figure}%
+\inputfig[unit=.9em,fontB={\figureversion{lining,prop}\scriptsize}]{figures/progmodel_turing}%
+\caption{Simple add algorithm for a Turing machine}%
+\label{fig:progmodel:tm_adder}%
+\end{figure}
+
+\glsreset{RASP}
+Similar to a Turing machine, the (abstract) \ix{register machine} can also be positioned as a model of computation.
+Notably, the \acix{RASP} model is a Von Neumann architecture, although with infinite number of registers~\cite{cook:rasp}.
+Modern processors are based on this model, and extend it for performance purposes with instructions beyond load/store, add/subtract of integers, read/print, and a conditional branch.
+These models of computation do not explicitly enforce a specific concurrency model, but it is far from trivial to map an algorithm for one of these machines to an arbitrary concurrency model.
+The example of \vref{fig:progmodel:polling} assumes a parallel \ac{RASP} model, which has two parallel executing sequential register machines.
+
+A different model of computation is \lcalc*~\cite{church:unsolvable}.
+In this model, computation is defined by means of functions, and a rule to reduce a function application to its result.
+\Cref{c:concurrency} discusses this model in detail.
+In contrast to a Turing machine, there is no specific order in which function applications must be evaluated.
+As a consequence, \lcalc naturally allows the implementation to apply reductions of an algorithm in parallel.
+Where \lcalc is built around functions, $\uppi$-calculus~\cite{milner:pi_calculus} (or \ix[process calculus]{process calculi} in general) defines operations on processes and channels.
+Although the model might be implemented in different ways, a naive implementation could map an algorithm in $\uppi$-calculus rather straightforward to the dataflow concurrency model.
+
+\glsreset{GHC}
+\glsreset{SANLP}
+All models of computation discussed above are Turing complete, and can therefore emulate each other.
+Hence, the choice for the model of computation that is used in the application, and for the one that is implemented by the hardware, does not necessarily have to match---although there might be some overhead in the translation.
+In the overview figure \chapfigpageref, the model of computation is positioned above the concurrency model, because the choice of it (mostly) depends on the programmer.
+Similar to the \ix{glue tooling} between the concurrency and memory model, the overview figure also describes glue between the model of computation and the concurrency model.
+This tooling is responsible for translating (parts of) the algorithm to the proper way of concurrency.
+For example, the \ac{GHC}~\cite{ghc} compiles expressions in \lcalc, which is basis for a functional language, to atomic units, which in turn are distributed among worker threads for computation.
+Additionally, \texttt{pn}~\cite{verdoolaege:pn} is a tool that extracts a parallel process network, which is similar to dataflow, from a sequential input program, which is known as a \ac{SANLP}.
+
+
+\section{Programming model: a peephole view}
+\label{s:progmodel:programming}
+
+Although the memory model, the concurrency model, and the model of computation are stacked in the overview figure \chapfigpageref, they are not layers with an increasing abstraction.
+Instead, the layers have orthogonal properties, and are ordered by the freedom of choice by the programmer.
+Some details of these models can be handled automatically, some must be controlled by the programmer.
+For example, if a \ac{KPN} is used as concurrency model on top of a shared-memory system, all memory model aspects can be handled automatically by the implementation of channels.
+So, abstractions in a higher layer can hide details of layers below, such as a \ac{KPN} channel library can easily transparently insert cache flushes, when required.
+The stacking order of the layers therefore indicates in what order layers can be hidden from the programmer.
+
+The choices for specific abstractions influence how a programmer sees the system and what it takes to write an application.
+A \emph{programming model} captures all aspects of all abstractions of the hardware, and presents only relevant parts of the system to the programmer, leaving all details out that the tooling can handle by itself.
+We use the following definition:
+\begin{describe}{programming model}
+	An abstraction of the system that consists of an \ix{abstract machine}, a \ix{programming paradigm}, and a subset of features of the underlying models that has to be dealt with by the programmer.
+\end{describe}
+
+A (good) programming model is tailored towards convenient usage by the programmer.
+The abstract machine is closely related to the machine of the model of computation.
+It is the general concept of the system that is programmed.
+For example, an abstract machine as a `multithreaded core' has the concept of a register machine, running threads in parallel---even though the \ac{OS} implements context switching, and the hardware might not have any knowledge of threads.
+The programming paradigm is a way of organizing the application.
+The model of computation can be reflected in the paradigm, such as the functional or imperative paradigm.
+It can also include compositional aspects, like in the object-oriented paradigm.
+
+\subsection{Existing programming language's models}
+
+The definition of the programming model includes `features of the underlying models', which we will explain based on existing programming languages.
+A programming language can be seen as an instance of the programming model, complemented with syntax and a type system, for example.
+As a programming model usually does not have a name, and the exact syntax, parsing, and type system is not relevant for this thesis, we use the language's name to address its programming model.
+\Vref{fig:progmodel:models} presents programming languages and properties of the models they are based on.
+
+\begin{flipfigure}%
+\inputfig{figures/progmodel_lang}%
+\caption{%
+	High-level overview of different programming models, indicating the models that are used in the compilation flow.
+	The cross section of models that is exposed to the programmer, is indicated by the overlay.}%
+\label{fig:progmodel:models}%
+\end{flipfigure}
+
+The first language in the figure is \ix{C99}~\cite{C99}.
+The language exhibits an imperative or structured paradigm, and the abstract machine belongs to the class of register machines.
+Because the language is single-threaded, memory consistency is not relevant.
+Therefore, the programming model only defines a fairly simple sequential machine.
+The fact that the C99 programming model does not include the memory model, means that the compiler can handle all machine-specific memory issues, such as alignment, and memory-related optimizations, like redundant load elimination.
+Although there are threading libraries for C99, such as \ix{Pthread} and \noac{OpenMP}, these are not part of the language.
+As a consequence, any memory model that comes with these libraries, defines amendments to the language, and a concurrency-agnostic C99 compiler might break the program.
+\Citet{boehm:threads_no_lib} argues that adding threads to C by libraries is flawed by design, because of this reason.
+
+\ix{C++11}~\cite{C++11} is object-oriented and uses a similar model of computation as C99.
+Additionally, it defines a threaded concurrency model that communicates via shared memory, and a relaxed, but rather complex, memory model~\cite{batty:math_cpp_concurrency}.
+In contrast to C99, handling concurrency and memory consistency mostly relies on the programmer.
+This means that the compiler cannot properly deduct from the source code how concurrency and memory consistency must be handled.
+For C++11, this means that a programmer has to define threads, and partition and balance the workload by hand.
+Moreover, every shared variable must be declared using \lsticode|std::atomic<>|, and every access to it is subject to manual specification of the required memory orderings---C++11 defaults to non-shared variables, and strong consistency rules for shared ones.
+Because a compiler cannot determine concurrency and memory ordering properly by itself, these models are part of the programming model, as indicated in \vref{fig:progmodel:models}.
+\ix[Java 5.0]{Java~5.0} is similar to C++11, except that Java uses a slightly different model of computation: the abstract machine has a stack instead of registers, and it cannot change the instructions by itself\footnote{
+	Java's just-in-time compilation does modify the code, but this is part of the virtual machine and not of the language.
+}.
+Using shared variables is less complex than in C++11, but the relaxed memory orderings are still exposed to the programmer.
+
+\ix{Go}~\cite{go} requires the programmer to define so-called goroutines, which are light-weight microthreads.
+These threads can communicate via shared memory and a relaxed memory model, but it is preferred to use \ac{FIFO} channels.
+Because the compiler understands the concept of channels---in contrast to concurrency in C99---it can handle them properly, which hides the underlying memory model from the programmer.
+Therefore, concurrency is under control of the programmer, but the memory model is not.
+
+The flow using \texttt{pn}~\cite{verdoolaege:pn} and \textsc{Espam}~\cite{nikolov:systematic_design} takes a restricted form of a sequential input, namely \acix{SANLP} with C functions, and extracts a process network, similar to a \ac{KPN}.
+These processes communicate via channels.
+\Ac{SANLP} is a coordination language~\cite{lee:problem_with_threads} that defines the relation between function inputs and outputs.
+These functions can be specified in any language, but as the default flow uses pure C functions, the model of computation is listed as a `register machine' in \vref{fig:progmodel:models}.
+Because the \ac{SANLP} input is sequential, the concurrency appears to be hidden from the programmer.
+However, the sizes of the functions, which are connected by \ac{SANLP}, determine the amount of concurrency.
+Therefore, it is still required that the programmer knows about concurrency and defines appropriate functions, in order to exploit parallelism of the architecture.
+So, a large part of the concurrency model is still included in the programming model.
+Nevertheless, among other details, synchronization and mapping is done automatically---this is an example of a programming model that does not expose the full concurrency model to the programmer, but only a subset of it.
+
+Finally, both Erlang and \ix{Haskell} are functional languages, based on \lcalc*.
+They handle concurrency differently.
+Erlang uses the Actor model, which requires explicitly defining separate processes that communicate via channels.
+For Haskell, \ac{GHC} supports special functions to indicate that specific expressions could be done in parallel, but are not required to.
+Such an expression can still access all other expressions according normal scoping rules.
+So, only for Erlang, the concurrency model is included in the programming model, because the programmer defines separate computational units and their communication patterns, where Haskell only needs hints what could be done in parallel and what not.
+
+Summarized, a \ix{programming model} contains everything that has to be under control of the programmer, so it is the \keyinsight{programmer's view} on a programmable system.
+Features of the platform that are exposed by the programming model, cannot be handled automatically by the compiler or other tooling, but everything else can be done automatically and in a correct way.
+\Cref{fig:progmodel:models} simplifies the programming models of the different languages, since the reality has more nuances; of course, Haskell still needs a bit of control regarding concurrency, and C++11 can do some memory consistency automatically.
+However, this overview captures the main idea of the languages.
+It also gives a \ix{characterization} of programming languages in terms of the amount of abstraction and automated control of a platform.
+
+
+\subsection{Less is more}
+\label{s:progmodel:small_overlap}
+
+The smaller the \ix[programming model!overlap]{overlap} of the programming model and the underlying models of the platform is, the more tooling can do without guidance of the programmer, which in turn makes programming less error prone.
+So, the goal is to reduce it to just the model of computation, without having excessive overhead in lower layers.
+This is only possible when sufficient \emph{knowledge} of the application is supplied to the compiler.
+In theory, when a compiler has all knowledge, then it can find the optimal translation.
+Otherwise, it makes either optimistic assumptions that could lead to incorrect behavior (\eg, all instructions of \vref{fig:progmodel:polling} can be freely reordered), or conservative assumptions that could lead to overhead (\eg, take precautions such that all instructions are always executed in one specific order).
+Hence, it is essential to tell the compiler the intended behavior for correct and efficient code, which should be enforced by the programming model.
+
+Although Go, \texttt{pn}+\textsc{Espam}, Erlang, and Haskell hide the lowest layer(s), it is not true that there is no control over them.
+It is possible to reformulate the source code of the application, such that a different compilation result is achieved.
+However, it is \emph{impossible} for the programmer to make errors with memory model related issues, for example, and the compiler cannot break the application by apply optimizations related to these layers.
+This is in great contrast to C++11 and Java~5.0, which need to have guidance to compile the code in \cref{fig:progmodel:polling} correctly.
+
+
+\section{Platform and portability}
+\label{s:progmodel:platform}
+
+In the end, all applications require hardware to run.
+Not only a processor is a necessity, also some form of memory, interconnect, and peripherals are essential.
+All hardware together is often labeled the platform.
+However, applications are rarely written on top of the `bare metal' hardware; at least, an \ac{OS} offers a more convenient environment for application programmers.
+Moreover, the \ac{OS} and all available libraries possibly influence how the platform is used more than the hardware platform itself.
+Therefore, we use the following definition of a platform:
+\begin{describe}{platform}
+The combination of the hardware and software that together shapes the environment for an application.
+\end{describe}
+
+The figure \chapfigpageref also includes the cross-layer `platform' to indicate what is included when we speak of one.
+A desktop computer's platform might be characterized by \theplatform{x86,Linux,Pthread}, which indicates the models and implementation of all layers the platform consists of.
+An application only sees a platform through the programming model, which filters some aspects out and transforms others, as discussed in \cref{s:progmodel:programming}.
+
+Consider the code of \vref{lst:progmodel:cpp11_portable}.
+For example, the desktop computer mentioned above can be programmed using \ix{C++11}.
+Then, the compiler can map C++11's threads to Pthreads or Linux's native threads; writes to \lstinline|X| can be translated to several instructions to store it atomically; and both writes are followed by an \lstinline|mfence| instruction.
+This code is \ix{portable}; when the program is compiled to \theplatform{\xSixtyFour,Windows}, threads are mapped to native Windows threads, and writes to \lstinline|X| become just one instruction, which simplifies atomicity guarantees.
+
+\begin{lstcols}{2}%
+\begin{lstcode}[variable={flag,X,t1,cout,endl},type={std,thread,atomic}]
+#include <thread>
+#include <atomic>
+#include <iostream>
+
+std::atomic<int> flag;
+std::atomic<double> X;
+
+void thread1(){
+	while(flag!=1){}
+	std::cout << X << std::endl;
+}
+
+void thread2(){
+	X = 0.42;
+	flag = 1;
+}
+
+int main(){
+	std::thread t1(thread1);
+	thread2();
+	t1.join();
+	return 0;
+}
+\end{lstcode}%
+\caption{Portable C++11 example}%
+\label{lst:progmodel:cpp11_portable}%
+\end{lstcols}
+
+Compare the portability to the example of \cref{lst:progmodel:c99_nonportable}.
+Essentially, the same program is defined, but now in \ix{C99} using Pthreads.
+This is not portable, despite the initial P of the threading model.
+The C programming model allows using arbitrary libraries that exist on the platform, Pthread in this case.
+The \ix{Pthread} library is not part of the programming language, and compiling the application to \theplatform{\xSixtyFour,Windows} is not possible.
+A more subtle bug can be found when porting from \theplatform{\xSixtyFour,Linux,Pthread} to 32-bit hardware: writing \lstinline|X| at \cref{line:progmodel:c99:wr_double} is not atomic anymore, the output to the console can be garbled, and the compiler does not know that it has to take some effort to fix this.
+Hence, the application uses properties of the platform, which are outside of the programming model---another platform that implements the same programming model does not necessarily have identical properties.
+An application that is to be ported without any modifications to the source code should, therefore, only use properties that are defined by the programming model.
+A threaded C program is by definition not portable without additional effort.
+
+\begin{lstcols}{2}%
+\begin{lstcode}[variable={flag,X,arg,t1,arg},type={pthread_t}]
+#include <pthread.h>
+#include <stdio.h>
+
+volatile int flag;
+volatile double X;
+
+void* thread1(void* arg){
+	while(flag!=1){}
+	printf("%f\n",X);
+	return NULL;
+}
+
+void thread2(){
+	X = 0.42; $\label{line:progmodel:c99:wr_double}$
+	flag = 1;
+}
+
+int main(){
+	pthread_t t1;
+	pthread_create(
+		&t1,NULL,thread1,NULL);
+	thread2();
+	pthread_join(t1,NULL);
+}
+\end{lstcode}\voidbox{)}% make Vim's syntax highlighting happy
+\caption{Non-Portable C99 example}%
+\label{lst:progmodel:c99_nonportable}%
+\end{lstcols}
+
+As discussed in \cref{s:trends:progmodel}, C is popular among all ten commercial systems.
+This is understandable, as most programmers know C, the language allows good control over the performance of the program, and a compiler can be built relatively easily, because C does not abstract much from the underlying architecture.
+However, it is very unlikely that any parallel application can be ported between all ten architectures, because concurrency within these platforms' programming models is as platform-dependent as inline assembly.
+The architectures, such as \Epiphany and \OCTEON, differ too much to offer the applications a common interface.
+
+%Tackling a large programming problem at once is impossible for a programmer; people tend to make abstractions to forget about details and focus on subproblems that are comprehensible.
+%In the case of \cref{fig:progmodel:polling}, focusing on the separate subproblems besides functionality is already tricky.
+%Usually, a programmer has an abstract view of the machine at hand.
+%The code in the figure is wrong, because the machine is overly simplified by assuming in-order processing, for example.
+
+
+\section{Related work}
+\label{s:progmodel:related}
+
+Most literature focuses on one of the models of the platform figure \chapfigpageref.
+To the best of our knowledge, no literature exists that integrates these models into one consistent platform view.
+This chapter organizes these existing models as layers of the platform, which the programming model exposes a specific cross section of.
+In turn, complexity is hidden from the programmer, and the compiler has enough knowledge to achieve high efficiency.
+
+A common approach for high efficiency is to assume that the programmer supplies the task graph~\cite{nikolov:systematic_design,hansson:compsoc,kwon:parallel_framework}.
+Then, tooling can find a mapping of this graph onto the hardware, given the constraints specified by the programmer.
+Although this approach hides low-level details of the hardware, it forces a programmer to conform to the given programming model for a specific multiprocessor architecture.
+This can give good performance, but still leaves the complexity regarding parallelization and partitioning, and the verification of it to the programmer.
+As we argued in \cref{s:progmodel:small_overlap}, it is better to reduce the programming complexity by proper abstraction layers.
+In \cref{c:memory}, we will do this for memory consistency, such that all consistency issues and portability are solved by the compiler, based on easy-to-formulate intentions of the programmer.
+
+Another direction is to extend existing languages, like \noac{OpenMP} and Cilk~\cite{blumofe:cilk}.
+Then, existing programs in the base language are still compatible with the extensions and allow incremental development of the program.
+However, adding functionality to a language that was originally absent (like concurrency in C), still has the risk of not being analyzable~\cite{lee:problem_with_threads,boehm:threads_no_lib}.
+Moreover, optimizations that are oblivious to the extensions can break the program.
+
+\Citet{lee:problem_with_threads} argues that extending is not a fruitful approach, and suggests using coordination languages.
+These languages have complementary features (such as concurrency) to the languages they coordinate, like \noac{UML} for C++ programs.
+This helps to structure programming, because concurrency is made explicit, for example.
+%However, it does not change the fact that the programmer has to specify all details of the layers of the platform (as discussed in \todo{somewhere}).
+However, no compiler has full knowledge of the complete application, as all of them focus on a specific language and feature set.
+In contrast, we target to increase the compiler's knowledge about the application, \eg, by annotations, that can lead to a highly efficient implementation, regardless the actual architecture---\Cref{c:memory,c:concurrency} make properties of the application more explicit, but reduce the programming complexity by abstraction layers at the same time.
+
+\Citet{linderman:merge} propose the Merge framework, which consists of a coordination language that connects functions from a library.
+This library contains implementations for all different architectures.
+The framework offers a generic high-level description based on the map--reduce pattern.
+Again, using such a library makes the compiler oblivious to the intended behavior, which leads to a suboptimal solution, in principle.
+
+Functional languages are attractive, because their model of computation naturally allows concurrency, and the abstractions hide low-level hardware complexities.
+Since the relation between the source code and the compiled binary is not obvious, analysis of resource usage is usually difficult~\cite{hammond:hume}.
+Hume~\cite{hammond:hume} tries to close this gap, but is still only analyzable in the lowest language abstraction layers.
+Although functional programming is promising (as we will show in \cref{c:concurrency}), it is only slowly adopted, because the paradigm differs greatly from common programming practice.
+
+A more holistic approach is presented by \citet{jerraya:programming_models}.
+They define the programming model for a multiprocessor system as a matrix, consisting of \ac{API} primitives for several abstraction layers, that is focused on hardware--software \codesign.
+Their approach assumes a concurrent input description, based on message passing, and explicit communication and synchronization, and allows simulating the whole system with a certain speed--accuracy trade-off.
+In contrast, we focus on hiding complexity from the programmer (\eg, see \cref{c:memory}).
+Moreover, we investigate by means of the programming model how to deduct an efficient implementation from information-rich source code, where \citeauthor{jerraya:programming_models} are more depending on run-time overhead by middleware layers, such as a hardware abstraction layer and resource management services.
+
+
+\section{Conclusion}
+
+The \ix{programming model} presents a platform in a specific, preferably elegant and convenient, way to the programmer.
+A programming model allows transparent implementation of certain details of the underlying platform, and therefore hides these details from the programmer.
+Which details are exposed to the programmer, differs per model, and hence per programming language.
+
+An application is written using a specific programming model.
+In order to let the compiler or any other glue tool in the platform make optimal decisions about the implementation of the application, the intentions should be clearly expressed.
+This means that only and exactly the required dependencies for computation are defined.
+In C99 with Pthreads, for example, this is not the case; it cannot be determined from inspecting the source code whether two write operations depend on each other or can safely be reordered.
+
+Finding a proper balance between expressiveness, freedom in implementation for the platform, and efficiency is hard.
+In general, a higher abstraction level allows a cleaner description of the hardware, which might be easier to program for.
+However, such an abstraction could come at a price.
+Subsequent chapters will show \ix[trade-off]{trade-offs} between abstraction and costs.
+
+
+
+%(observed during DATE2012):
+%Most solutions push parallel programming complexity to software.
+%People talk about `programming models', but actually speak of additional keywords for C, API, libraries, etc.
+%Nobody defines a model or knows exactly what is meant by that.
+%A programming model is merely a programming paradigm/language (usually C) and details that are required to know of the proposed approach.
+
+%AMD wants to support C++ in future CPU/GPU integrated architecture.
+%However, C++ is for register machines and is in principle not suitable for GPU architectures.
+%They plan to add context switching/stacks to a GPU for C++ support, but this mostly a hackery solution to the parallel programming problem.
+

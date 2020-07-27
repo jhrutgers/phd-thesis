@@ -1,0 +1,46 @@
+\pgfplotsset{
+	every bar plot/.style={},
+	bar plot/.style={
+		stack plots=y,
+		/tikz/ybar,
+		x tick label style={rotate=30,anchor=base east,yshift=-1.75ex,xshift=.5ex},
+		width=.6\linewidth,
+		height=.5\linewidth,
+		ymajorgrids=true,
+		yminorgrids=true,
+		minor y tick num=1,
+%		enlarge x limits=false,
+		enlarge x limits={true,abs value=.5},
+		x axis line style=-,
+		bar width=3ex,
+		xtick=data,
+		cycle list name=default bars,
+		every bar plot,
+	},
+	every bar plot relative/.style={},
+	bar plot relative/.style={
+		bar plot,
+		ymax=100,
+		ymin=0,
+		y axis line style=-,
+		enlarge y limits=false,
+		every bar plot relative,
+	},
+	bar style 1/.style={fill=green!20!blue!80,draw,thesis bar style 1/.try},
+	bar style 2/.style={fill=green!75,draw,thesis bar style 2/.try},
+	bar style 3/.style={fill=red!70,draw,thesis bar style 3/.try},
+	bar style 4/.style={fill=black,draw,thesis bar style 4/.try},
+	bar style 5/.style={fill=yellow!70,draw,thesis bar style 5/.try},
+	/tikz/legend border/.style={
+		draw=nicegray,
+		rectangle,
+		inner xsep=1ex,inner ysep=.25ex,
+	}
+}%
+\pgfplotscreateplotcyclelist{default bars}{%
+	bar style 1\\%
+	bar style 2\\%
+	bar style 3\\%
+	bar style 4\\%
+	bar style 5\\%
+}%

@@ -1,0 +1,40 @@
+\input{figures/hw_lock_traffic_style}%
+\pgfplotstableset{
+	col sep=semicolon,
+	create on use/x/.style={create col/set list={3,4,2,1}},
+}%
+\pgfplotstableread{data/hw_lock_mutex_stats.dat}\mutexstats%
+\begin{tikzpicture}[
+	mutex free/.style={fill=green!70,draw=black,bar style 2/.try},
+	mutex re/.style={mutex free},
+	mutex locked/.style={fill=red,draw=black,bar style 4/.try},
+]
+	\begin{axis}[
+		lock bar plot relative,
+		name=mutex,
+		ybar stacked,
+		ymax=1,
+		ylabel={\strut Fraction of all mutex locks},
+	]
+		%\addplot+[mutex re] table[x=x,y=re] from \mutexstats;
+		\addplot[draw=none,fill=none] table[x=x,y=re] from \mutexstats;
+		\addplot+[mutex free] table[x=x,y=free] from \mutexstats;
+		\addplot+[mutex locked] table[x=x,y=locked] from \mutexstats;
+		\draw \foreach \i in {1,2,...,100} { ($(axis cs:1,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\draw \foreach \i in {1,2,...,100} { ($(axis cs:2,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\draw \foreach \i in {1,2,...,100} { ($(axis cs:3,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\draw \foreach \i in {1,2,...,100} { ($(axis cs:4,0)-(\pgfplotbarwidth/2,0)+(0,\i\griddist)$) -- ++(\pgfplotbarwidth,-\pgfplotbarwidth) };
+		\path coordinate (a) at ($(axis cs:1,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),mutex re,name=c,inner sep=0,outer sep=0] {} ;
+		\path coordinate (a) at ($(axis cs:2,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),mutex re,name=c,inner sep=0,outer sep=0] {} ;
+		\path coordinate (a) at ($(axis cs:3,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),mutex re,name=c,inner sep=0,outer sep=0] {} ;
+		\path coordinate (a) at ($(axis cs:4,0)-(\pgfplotbarwidth/2,0)$) coordinate (b) at ($(a)+(\pgfplotbarwidth,100)$) node[fit=(a) (b),mutex re,name=c,inner sep=0,outer sep=0] {} ;
+	\end{axis}
+	\draw
+		($(mutex.east)+(1em,.5em)$) node[anchor=south west,name=mutexn,inner sep=0,text ragged right,max text width=18ex]
+			{State of mutex at moment of locking:}
+		++(0,-\baselineskip)	\mylegendentry{name=mutex}{mutex locked}{locked}
+		++(0,-\baselineskip)	\mylegendentry{}{mutex free}{free}
+		++(0,-\baselineskip)	\mylegendentry{name=mutexs}{mutex re,name=keyre}{free (relock)};
+	\node[legend border,fit={(mutexn) (mutexs)}] {};
+	\fillpat{keyre}
+\end{tikzpicture}%

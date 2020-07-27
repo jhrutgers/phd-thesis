@@ -1,0 +1,149 @@
+\usetikzlibrary{calc,arrows,shapes.geometric,fit,patterns}%
+%
+\tikzset{
+	outset border/.style={
+		preaction={draw=#1!50},
+		preaction={draw=none,fill=#1!50!black,transform canvas={xshift=.5\pgflinewidth,yshift=-.5\pgflinewidth}},
+		draw=none,
+		outer sep=.5\pgflinewidth,
+	},
+	lighted surface/.style={
+		fill=none,
+		shade,
+		top color=#1!85,
+		bottom color=#1!85!black,
+		shading angle=30,
+	},
+	outset/.style={outset border=#1,lighted surface=#1},
+	outset/.default=blue!30!white,
+	icon/.style={post process={\addarchicon{\noexpand#1}},postpone label},
+	no icon/.style={icon={},immediate label},
+}%
+%
+\newcommand{\addarchicon}[2]{
+	\node[inner sep=.25\portablefigunit,outer sep=0,anchor=south east] at ($(#2.south east)+(.2\pgflinewidth,-.2\pgflinewidth)$)
+		{\tikz[scale=.75,rotate=-20,draw=black!60,text=black!60,inner sep=0,outer sep=0]{#1}};
+	\node[inner sep=.25\portablefigunit,outer sep=0,anchor=south east] at (#2.south east)
+		{\tikz[scale=.75,rotate=-20,draw=black!30,text=black!30,inner sep=0,outer sep=0]{#1}};
+}%
+%
+% Architecture styles
+\tikzset{
+	cluster/.style={rectangle,draw=black!80,fill=black!3,rounded corners=2pt},
+	component/.style={rectangle,
+		line width=.8pt,rounded corners=2pt,
+		draw=black!50,fill=black!10,
+		text centered,font=\scalefont{1},wrap text,
+		minimum size=4em,outer sep=.5\pgflinewidth,inner sep=.75ex,
+		},
+	core/.style={component,
+		line width=1.6pt,
+		rounded corners=1pt,
+		outset=blue!20!black!90!white,
+		text=white,
+		icon=\procicon},
+	memory/.style={component,
+		fill=black!20,
+		drop shadow,
+		icon=\memicon},
+	peripheral/.style={component,
+		draw=black!80,
+		densely dotted,
+		icon=\periphicon},
+	software/.style={component,
+		icon=\softwareicon},
+	interface/.style={component,
+		outer sep=0,rounded corners=.75em,
+		draw=white,line width=1ex},
+	mux/.style={component,
+		trapezium,trapezium angle=110,trapezium stretches body,
+		rounded corners=.5pt,no wrap text},
+%
+	interconnect/.style={component,fill=white,icon=\interconnecticon},
+	bus/.style={black,line width=3pt,font=\scalefont{.7}},
+	bus label/.style={draw=none,fill=none,fontB},
+	connection/.style={->,black,thick,font=\scalefont{.7},rounded corners=3pt},
+	bidirectional connection/.style={connection,<->},
+	joint/.style={circle,draw=none,fill=black,minimum size=1ex,inner sep=0pt,anchor=center},
+%
+	scope node/.append style={remember picture,connection/.append style={overlay}},
+%	
+	% deprecated
+	subcomponent/.style={component,thick,draw=yellow!50!black,fill=yellow!10,text centered,minimum width=1em,minimum height=1.5em},
+}%
+%
+\newcommand{\procicon}{
+	\draw
+		(0,0) rectangle (.5,1)
+		(.15,.15) -- (.15,.85);
+	\draw
+		(.5,.25) -- (.75,.25)
+		(.5,.5)  -- (.75,.5)
+		(.5,.75) -- (.75,.75);
+	\draw
+		(0,.25) -- (-.25,.25)
+		(0,.5)  -- (-.25,.5)
+		(0,.75) -- (-.25,.75);
+}%
+%
+\newcommand{\memicon}{
+	\draw (0,0) rectangle (.5,1);
+	\draw
+		(.5,.25) -- (.3,.375) -- (.5,.5);
+}%
+%
+\newcommand{\interconnecticon}{
+	\draw
+		(.2,0) -- (.2,1)
+		(.4,0) -- (.4,1)
+		(.6,0) -- (.6,1)
+		(.8,0) -- (.8,1);
+	\draw
+		(0,.2) -- (1,.2)
+		(0,.4) -- (1,.4)
+		(0,.6) -- (1,.6)
+		(0,.8) -- (1,.8);
+}%
+%
+\newcommand{\periphicon}{
+	\node[inner sep=0,font=\scalefont{.5}] {\textsf{I/O}};
+}%
+%
+\newcommand{\softwareicon}{
+	\node[inner sep=0,outer sep=0,transform shape]{\tikz{
+		\def\softwarefont##1{\textsf{\figureversion{lining,tab}\scalefont{.4}##1}}
+		\node[anchor=east] at (0,0) {\softwarefont{01}};
+		\node[anchor=east] at (0,-1ex) {\softwarefont{001}};
+		\fixboundingbox
+		\node[anchor=east] at (0,-2ex) {\softwarefont{010}};
+	}};
+}%
+%
+%
+% Application styles (for charts)
+\tikzset{
+	fluidanimate/.style={draw=black,fill=yellow!70,bar style 1/.try},
+	radiosity/.style={draw=black,fill=red!70,bar style 2/.try},
+	raytrace/.style={draw=black,fill=green!90,bar style 3/.try},
+	volrend/.style={draw=black,fill=blue!90!green!75,bar style 4/.try},
+}%
+%
+\ifx\bussep\undefined\newlength{\bussep}\fi%
+\setlength{\bussep}{4ex}%
+%
+\ifx\griddist\undefined\newlength{\griddist}\fi%
+\setlength{\griddist}{.9ex}%
+\newcommand{\fillpat}[2][.9ex]{
+	\begin{scope}
+		\setlength{\griddist}{#1}
+%		\path[fill=white,draw] (#2.south west) rectangle (#2.north east);
+		\clip (#2.south west) rectangle (#2.north east);
+		\foreach \i in {0,1,...,10} \draw (#2.south west) ++(\i\griddist,0) -- ++(-\i\griddist,\i\griddist);
+	\end{scope}
+}%
+%
+% 
+% PMC-related stuff
+\providecommand{\scstart}[1]{\tikz[overlay,remember picture]{\coordinate (scope start #1) at (0,0);}}%
+\providecommand{\scend}[1]{\tikz[overlay,remember picture]{\draw[thick,chart color 3,left to reversed-right to reversed] (-1.5ex-0#1ex,0) -- ($(scope start #1)+(-1.5ex-0#1ex,1ex)$);}}%
+%

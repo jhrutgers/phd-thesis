@@ -1,0 +1,128 @@
+\def\eqkindof{\simeq}
+
+%% Convention:
+\newsym{thing}			{\ifstrempty{#1}{x}{#1}}							[x]			{a thing}
+\newsym{function}		{\ifstrempty{#1}{f}{#1}\ifstrempty{#2}{}{(#2)}}		[f]			{a function}
+\newsym{property}		{\ifstrempty{#1}{\rho}{#1}_{#2}}					[*rho]		{a (constant) property}
+\newsym{set}			{\ifstrempty{#1}{X}{#1}_{#2}}						[X]			{a set}
+\newsym{map}			{\SYMfunction[\ifstrempty{#1}{M}{#1}][#2]}			[M]			{a map}
+
+%% Generic SoC
+\newsym{corecount}		{n}											[]			{number of cores in a \acs{SoC}}
+\newsym{hitrate}		{\SYMproperty[\alpha]}						[*alpha]	{cache hit rate}
+
+%% NoC packets
+% time
+%\newsym{arrival}		{t_a\ifstrempty{#1}{}{(#1)}}				[t(a)]		{time of arrival}
+%\newsym{finish}		{t_s\ifstrempty{#1}{}{(#1)}}				[t(s)]		{time of finishing}
+\newsym{period}			{\tau}										[*tau]		{period of time}
+% latency
+\newsym{thelatency}		{\SYMfunction[S_{\mathrm{#1}}][#2]}			[S]			{packet latency}						[interconnect]
+\newsym{latency}		{\SYMthelatency[][#1]}						[S]			{packet latency}						[interconnect]
+\newsym{latencyBC}		{\SYMthelatency[bc][#1]}					[S*bc]		{best-case packet latency}				[interconnect]
+\newsym{latencyWC}		{\SYMthelatency[wc][#1]}					[S*wc]		{worst-case packet latency}				[interconnect]
+\newsym{latencyAC}		{\SYMthelatency[ac][#1]}					[S*ac]		{average-case packet latency}			[interconnect]
+% tree config
+\newsym{buffer}			{\SYMproperty[\beta]}						[*beta]		{buffer size after \Warpfield's tree \acsp{MUX} (in \acsp{flit})}	[interconnect]
+% packet
+%\newsym{packet}		{\SYMthing[p]}								[p]			{\acs{NoC} packet}
+%\newsym{packets}		{\SYMset[P]}								[P]			{set of packets}
+\newsym{packettype}		{\SYMthing[q]}								[q]			{\acs{NoC} packet request type}			[interconnect]
+\newsym{packettypes}	{\SYMset[Q]}								[Q]			{set of packet request types}			[interconnect]
+\newsym{packetsize}		{\SYMproperty[\ell][#1]}					[l]			{length of a packet (in \acsp{flit})}	[interconnect]
+\newsym{packetcount}	{\SYMfunction[I][#1]}						[I]			{issued packet count}					[interconnect]
+\newsym{packetinterval}	{\SYMproperty[\psi][#1]}					[*zpsi]		{packet issue interval}					[interconnect]
+\newsym{interference}	{\SYMfunction[H][#1]}						[H]			{number of \acsp{flit} that can hinder packets}	[interconnect]
+
+%% dist lock
+\newsym{lock}			{\SYMthing[l]}								[l]			{lock}									[distributed lock]
+\newsym{state}			{\SYMthing[s]}								[s]			{state}
+\newsym{self}			{\text{self}}								[self]		{it calling process self}				[distributed lock]
+\newsym{lockset}		{\SYMmap[L_{#1}][#2]}						[L]			{map of locks to the lock's state}		[distributed lock]
+\newsym{servermap}		{\SYMmap[G][#1]}							[G]			{lock server's map of locks given out to a process}	[distributed lock]
+\newsym{requester}		{r}											[]			{lock requester}						[distributed lock]
+\newsym{locks}			{\lvert\SYMlockset[#1]\rvert}				[L]			{total number of locks}					[distributed lock]
+
+\newsym{upperbound}		{\mathcal{O}\ifstrempty{#1}{}{(#1)}}		[O]			{big O notation for upper bound on complexity}
+\newsym{lowerbound}		{\mathcal{\Omega}\ifstrempty{#1}{}{(#1)}}	[*Omega]	{big Omega notation for lower bound on complexity}
+\newsym{bound}			{\mathcal{\Theta}\ifstrempty{#1}{}{(#1)}}	[*Theta]	{big Theta notation for bound on complexity}
+
+%% PMC
+
+\newcommand{\before}[1][]{\ensuremath{\ifstrempty{#1}{\prec}{\overset{\mbox{\raisebox{-.2ex}[.4ex][0ex]{\scriptsize{#1}}}}{\prec}}}}
+\newcommand{\beforeeq}[1][]{\ensuremath{\ifstrempty{#1}{\leq}{\overset{\mbox{\raisebox{-.2ex}[.4ex][0ex]{\scriptsize{#1}}}}{\preceq}}}}
+
+\newsym{Var}			{V}											[]			{set of locations}						[memory model]
+\newsym{var}			{v}			 								[]			{location}								[memory model]
+\newsym{Proc}			{P}			 								[]			{set of processes}
+\newsym{proc}			{p}			 								[]			{process}
+\newsym{Op}				{O}			 								[]			{set of operations}						[memory model]
+\newsym{op}				{o}			 								[]			{operation}								[memory model]
+
+\newsym{Order}			{\before[#1]}								[**before]		{set of operation orderings}					[memory model]
+\newsym{order}			{\before[#2]_{#1}}							[**order]		{specific ordering on operations}				[memory model]
+\newsym{orderglobal}	{\SYMorder[G][#1]}							[**orderglobal]	{globally observable ordering}					[memory model]
+\newsym{orderlocal}		{\SYMorder[L][#1]}							[**orderlocal]	{locally observable ordering}					[memory model]
+\newsym{orderprog}		{\SYMorder[P][#1]}							[**orderprog]	{globally observable program order}				[memory model]
+\newsym{orderfence}		{\SYMorder[F][#1]}							[**orderfence]	{globally observable fence ordering}			[memory model]
+\newsym{ordersync}		{\SYMorder[S][#1]}							[**ordersync]	{globally observable synchronization ordering}	[memory model]
+
+\newsym{opwrite}		{\mathsf{w}}								[w]			{write operation}						[memory model]
+\newsym{opread}			{\mathsf{r}}								[r]			{read operation}						[memory model]
+\newsym{opacquire}		{\mathsf{A}#1}								[A]			{acquire operation}						[memory model]
+\newsym{oprelease}		{\mathsf{R}#1}								[R]			{release operation}						[memory model]
+\newsym{opfence}		{\mathsf{F}#1}								[F]			{fence operation}						[memory model]
+\newsym{opacquirenx}	{\SYMopacquire[']}							[A']		{acquire operation}						[memory model]
+\newsym{opreleasenx}	{\SYMoprelease[']}							[R']		{release operation}						[memory model]
+\newsym{opFENCE}		{\SYMopfence[']}							[F']		{fence operation}						[memory model]
+\newsym{any}			{*}											[**star]	{any operation, location, or value}		[memory model]
+
+\newcommand{\memoppattern}[4]{%
+	\ensuremath{\mathopen{{(}\!\!{(}}%
+		\ifstrempty{#1}{\SYMany}{\mathsf{#1}},%
+		\ifstrempty{#2}{\SYMany}{#2},%
+		\ifstrempty{#3}{\SYMany}{#3},%
+		\ifstrempty{#4}{\SYMany}{#4}%
+	\mathclose{{)}\!\!{)}}}}
+
+\newsym{write}			{\memoppattern{\SYMopwrite}{#1}{#2}{#3}}	[*w]		{write operation pattern}
+\newsym{read}			{\memoppattern{\SYMopread}{#1}{#2}{#3}}		[*r]		{read operation pattern}
+\newsym{acquire}		{\memoppattern{\SYMopacquire}{#1}{#2}{}}	[*A]		{acquire operation pattern}
+\newsym{release}		{\memoppattern{\SYMoprelease}{#1}{#2}{}}	[*R]		{release operation pattern}
+\newsym{fence}			{\memoppattern{\SYMopfence}{#1}{#2}{}}		[*F]		{fence operation pattern}
+\newsym{acquirenx}		{\memoppattern{\SYMopacquirenx}{#1}{#2}{}}	[*A']		{non-exclusive acquire operation pattern}
+\newsym{releasenx}		{\memoppattern{\SYMopreleasenx}{#1}{#2}{}}	[*R']		{non-exclusive release operation pattern}
+\newsym{FENCE}			{\memoppattern{\SYMopFENCE}{#1}{#2}{}}		[*F']		{FENCE operation pattern}
+
+\newsym{value}			{\operatorname{value}\ifstrempty{#1}{}{(#1)}} [value]	{value of a location}
+\newsym{lastwrite}		{W_{#1}}									[W]			{last write}					[memory model]
+%\newsym{lastrelease}	{\mathnormal{\SYMoprelease}_{#1}}			[R]			{last release}
+
+\newsym{init}			{\memoppattern{\{\SYMopwrite,\SYMoprelease\}}{\epsilon}{#1}{\ifstrempty{#2}{\bot}{#2}}} %
+																					[*init]	{initial value of the memory}
+\newsym{Opinit}			{\forall\SYMvar\in\SYMVar:\lvert\SYMinit[\SYMvar]\rvert=1}	[*init]	{full memory initialization}
+\newsym{Exec}			{E}															[]		{execution}						[memory model]
+\newsym{Execdef}		{\SYMExec#1=(\SYMProc,\SYMVar,\SYMOp#1,\SYMOrder#1)}		[E]		{definition of execution}
+
+% lambda-calculus
+
+\newsym{opconstr}		{\mathsf{c}}		[c]	{construction}		[memory model]
+\newsym{opindirect}		{\mathsf{i}}		[i]	{indirect}			[memory model]
+\newsym{opdestr}		{\mathsf{d}}		[d]	{destruct}			[memory model]
+
+% typeset a lambda-expression:
+% \lexpr x y z.f x y z;			where the number of variables and arguments can be zero or more
+\makeatletter
+\def\lexpr@skip{\mskip1\thickmuskip plus 2mu minus 1mu\relax}
+\def\lexpr@prefix#1{\lambda #1\mskip.4\thinmuskip plus 1mu minus 1mu\relax\mathord.\mskip.6\thinmuskip plus 1mu minus 1mu\relax}
+\newsym{thelexpr}{\ifstrempty{#1}{}{\lexpr@prefix{#1}}{#2}\ifstrempty{#3}{}{\lexpr@skip{#3}}}	{lambda expression}
+\def\lexpr@prefixes#1 {\lexpr@prefix{#1}\@ifnextchar.\@gobble{\lexpr@prefixes}}
+\def\lexpr@terms#1 {#1\@ifnextchar;\@gobble{\lexpr@skip\lexpr@terms}}
+\def\lexpr#1.#2;{%
+	\ensuremath{%
+		\ifstrempty{#1}{}{\lexpr@prefixes #1 .}%
+		\SYMthelexpr[][{\lexpr@terms #2 ;}]%
+	}%
+}
+\makeatother
+

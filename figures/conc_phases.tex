@@ -1,0 +1,29 @@
+\inputonce{figures/plot_style}%
+\begin{tikzpicture}[
+	bar beta/.style={bar style 1},
+	bar idle/.style={bar style 2},
+	bar blackhole/.style={bar style 3},
+	bar local gc/.style={bar style 4},
+	bar global gc/.style={bar style 5},
+]
+	\begin{axis}[
+		bar plot relative,
+		ylabel={\strut Time spent (\si{\percent} of execution time)},
+		xticklabels={\theapp{coins},\theapp{parfib},\theapp{partak},\theapp{prsa},\theapp{queens}},
+		name=phases,
+	]
+	\pgfplotstableread[col sep=comma]{data/conc_phases.dat}\datfile
+	\addplot+[bar beta]		table[x expr=\coordindex,y expr=\thisrowno{1}/\thisrowno{6}*100] \datfile;
+	\addplot+[bar idle]		table[x expr=\coordindex,y expr=\thisrowno{2}/\thisrowno{6}*100] \datfile;
+	\addplot+[bar blackhole]table[x expr=\coordindex,y expr=\thisrowno{5}/\thisrowno{6}*100] \datfile;
+	\addplot+[bar local gc] table[x expr=\coordindex,y expr=\thisrowno{3}/\thisrowno{6}*100] \datfile;
+	\addplot+[bar global gc]table[x expr=\coordindex,y expr=\thisrowno{4}/\thisrowno{6}*100] \datfile;
+	\end{axis}
+
+	\addmylegendentry{bar global gc}{global \acs{GC}}
+	\addmylegendentry{bar local gc}{local \acs{GC}}
+	\addmylegendentry{bar blackhole}{stalling on black hole}
+	\addmylegendentry{bar idle}{idle}
+	\addmylegendentry{bar beta}{running $\upbeta$-reduction}
+	\mylegend[legend border,at=(phases.east),anchor=west,outer sep=1ex];
+\end{tikzpicture}%

@@ -1,0 +1,18 @@
+% \xth{n} will print n^{th}, where th is one of {st,nd,rd,th}, depending on n.
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{xth}
+\RequirePackage{etoolbox,amsmath,pgf}
+
+\providecommand{\superscript}[1]{\ensuremath{^{\text{#1}}}}
+\providecommand{\subscript}[1]{\ensuremath{_{\text{#1}}}}
+\def\ifpgfeval#1{\pgfmathtruncatemacro{\pgfmathresult}{#1}\ifnumcomp{\pgfmathresult}{=}{1}}
+
+\def\xth#1{#1\ifpgfeval{abs(mod(#1,100))>10}{\ifpgfeval{abs(mod(#1,100))<20}{\xTH{#1}}{\xST{#1}}}{\xST{#1}}}
+\def\xTH#1{\superscript{th}}
+\def\xST#1{%
+\ifpgfeval{mod(abs(#1),10)==1}{\superscript{st}}{%
+\ifpgfeval{mod(abs(#1),10)==2}{\superscript{nd}}{%
+\ifpgfeval{mod(abs(#1),10)==3}{\superscript{rd}}{%
+\xTH{#1}}}}}
+

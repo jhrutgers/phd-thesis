@@ -1,0 +1,75 @@
+\tikzset{
+	mem base/.style={wrap text},
+	mem object/.style={draw,outer sep=0,wrap text,text width=2.5em},
+	mem shade/.style={mem object,draw=none,top color=white,bottom color=black!30,anchor=south,minimum height=10em},
+	static base/.style={mem base},
+	static object/.style={mem object,alive},
+	static const/.style={static object},
+	static fun/.style={static object,rounded corners=.8ex},
+	heap base/.style={mem base,text width=7em},
+	heap object/.style={mem object,text width=7em,alive},
+	heap app/.style={heap object,rounded corners=.4ex},
+	heap const/.style={heap object},
+	heap gap/.style={heap object,draw=none,fill=none},
+	heap shade/.style={mem shade,text width=7em},
+	stack base/.style={mem base},
+	stack object/.style={mem object,alive},
+	stack var/.style={stack object},
+	stack shade/.style={mem shade},
+	pointer/.style={draw,->},
+	indirect/.style={pointer,densely dashed},
+	alive/.style={fill=living,semithick},
+	dead/.style={fill=dead,thin,densely dotted},
+	global/.style={double},
+	eval label/.style={anchor=north,wrap text,outer sep=1.5ex},
+}
+
+\definecolor{static}{hsb}{0.60,0.10,1.00}	% a bit blue
+\definecolor{living}{hsb}{0.26,0.10,1.00}	% light green
+\definecolor{dead}{hsb}  {0.01,0.40,1.00}	% a bit darker red
+
+\def\initmem<#1>[#2] #3;{
+	\node[#1 base,at={(0,0)},#2] (#1 base) {\portablefigfontB #3};
+	\expandafter\edef\csname last #1\endcsname{#1 base}
+}
+\def\pushmem<#1>[#2] (#3) #4;{
+	\node[#1 object,#2,anchor=south] (#3) at (\csname last #1\endcsname.north) {\portablefigfontB #4};
+	\expandafter\xdef\csname last #1\endcsname{#3}
+}
+\def\setptr[#1] (#2) (#3);{
+	\begin{pgfonlayer}{foreground}
+		\path[pointer] (#2) to[#1] (#3);
+	\end{pgfonlayer}
+}
+\def\setindir[#1] (#2) (#3);{
+	\begin{pgfonlayer}{foreground}
+		\path[indirect] (#2) to[#1] (#3);
+	\end{pgfonlayer}
+}
+\def\initstatic[#1];{\initmem<static>[#1] {static};}
+\def\addstatic[#1] (#2) #3;{\pushmem<static>[#1,fill=static] (#2) {#3};}
+\def\initheap[#1];{\initmem<heap>[#1] {heap};\node[heap base,#1,heap shade] at (heap base.north) {};}
+\def\addheap[#1] (#2) #3;{\pushmem<heap>[#1] (#2) {#3};}
+\def\initstack[#1];{\initmem<stack>[#1] {stack};\node[stack base,#1,stack shade] at (stack base.north) {};}
+\def\addstack[#1] (#2) #3;{\pushmem<stack>[#1] (#2) {#3};}
+
+\newenvironment{evalstep}[2][]{
+	\begin{scope}[#1]
+		\node[eval label] at (0,0) {#2};
+		\defaultevalinit
+}{
+	\end{scope}
+}
+
+\def\defaultevalinit{
+		\initstatic[at={(-6.75em,0)}];
+		\initheap[at={(0em,0)}];
+		\initstack[at={(6.75em,0)}];
+}
+\newcommandx{\lapply}[4][1=,3=]{%
+	\parbox[c]{.45\linewidth}{\hfill\strut$({#1\ifstrempty{#2}{\ldots}{#2}})$}\hspace{.5ex}%
+	\parbox[c]{.45\linewidth}{$(${#3{\ifstrempty{#4}{$\ldots$}{$#4$}}}$)$\strut\hfill}%
+}
+\def\lapprefsize{\scalebox{.67}}
+\def\lappref#1{\lapprefsize{$#1$}}
+

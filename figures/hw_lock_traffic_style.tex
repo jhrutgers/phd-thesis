@@ -1,0 +1,33 @@
+\inputonce{figures/arch_style}%
+\inputonce{figures/plot_style}%
+\pgfplotsset{
+	every lock bar plot/.style={
+		xticklabels={\theapp{fluidanimate},\theapp{radiosity},\theapp{raytrace},\theapp{volrend}},
+		xtick={1,2,3,4},
+		xmin=1,
+		width=.48\linewidth,
+	},
+	lock bar plot/.style={
+		bar plot,
+		every lock bar plot,
+	},
+	lock bar plot relative/.style={
+		bar plot relative,
+		every lock bar plot,
+		ymax=100,
+		ymin=0,
+		y axis line style=-,
+		enlarge y limits=false,
+	},
+}%
+\pgfplotstableset{
+	col sep=semicolon,
+}%
+\tikzset{
+	bar spare/.style={fill=white,draw},
+	bar write/.style={fill=black!20!red!80!black,draw,bar style 5/.try},
+	bar uncached read/.style={fill=red!50!yellow,draw,bar style 4/.try},
+	bar mutex read/.style={fill=green!70,draw,bar style 3/.try},
+	bar dcache read/.style={fill=yellow!70,draw,bar style 2/.try},
+	bar icache read/.style={fill=white!25!blue!70!green,draw,bar style 1/.try},
+}%

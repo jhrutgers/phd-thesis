@@ -1,0 +1,1642 @@
+\inputonce{figures/arch_style}
+
+\begin{chapterfig}[\Cref{c:memory}]
+\platformlayer[padded]			(app)	{\SPLASH};
+\platformlayerlabel[]			<app>	{application};
+\platformlayer[model,padded]	(pm)	{\twopartlabel{}{C / C++}};
+\platformlayerlabel[]			<pm>	{programming model};
+\platformlayer[model,padded]	(moc)	{\twopartlabel{}{register machine}};
+\platformlayerlabel[]			<moc>	{model of computation};
+\platformlayerglue[padded]		()		{\twopartlabel{\thecmd{g++}}{}};
+\platformlayer[model,padded]	(cm)	{\twopartlabel{}{Pthread}};
+\platformlayerlabel[]			<cm>	{concurrency model};
+\platformlayerglue[padded]		()		{\Helix};
+\platformlayer[model,padded]	(mm)	{\textbf{\acl{PMC}}};
+\platformlayerlabel[]			<mm>	{memory model};
+\platformlayer[padded]			(hw)	{\MicroBlaze, \textbf{software cache coherency}, \acl{SPM}, \acl{DSM}};
+\platformlayerlabel[]			<hw>	{hardware};
+\rightflappadded[]				<pm-cm>;
+\crosslayerright[] <moc.north east->		()		{\Starburst};
+\crosslayerleft[] <app.north west-mm.west>	() 		{software layers};
+\crosslayerleft[] <mm.west->				() 		{hardware};
+\end{chapterfig}
+
+\setaachaptext[50]{this is a chapter about memory models}
+\chapter{Usable Weak Memory Model}
+\label{c:memory}
+\nofootnote{Large parts of this chapter have been published in \selfcite{rutgers:pmc}.}
+
+\begin{abstract}%
+Porting software to different platforms often requires modifications of the application, when the supported programming model is different.
+Commonly, different platforms support different memory consistency models.
+%As a consequence, the completion order of reads and writes in a multi-threaded application can change, which may result in improper synchronization.
+%For example, a processor with out-of-order execution could break synchronization if proper fence instructions are missing.
+%Such a bug can cause sporadic errors, which are hard to debug.
+In this chapter, an approach is presented that makes applications independent of the memory model of the hardware.
+As a result, they can be compiled to hardware that supports any of the common memory architectures.
+The key is having a synchronized weak memory model that only guarantees the most fundamental orderings of reads and writes, and annotations to specify additional ordering constraints explicitly.
+As a result, tooling can transparently and properly implement fences, cache flushes, \etc when appropriate, without losing flexibility of the hardware design.
+\end{abstract}
+
+With the growth in the number of mobile and embedded devices, porting software to various platforms is becoming increasingly important.
+Programmers not only face different software contexts (\acp{OS} and \acp{API}), but also different hardware architectures with various numbers of cores and communication infrastructures.
+\ix[portable]{Porting}\footnote{%
+	\emph{Porting} means translating a program such that it can be run on another platform.
+	\emph{Portability} is a property, which means that porting such a program is easy.
+} to other hardware often requires subtle, but fundamental changes to the software, due to a changed \ix[memory (consistency) model]{memory consistency model}.
+As \cref{s:trends:progmodel} discussed, commercial many-core systems assume being programmed using C, and C includes the memory model in the programming model.
+Therefore, the application has to be adapted to changes in the memory model and thus the programming model, which can be a thorough and error-prone task.
+
+In \cref{s:progmodel:platform}, we concluded that porting an application could only be done transparently, when the programming model does not change.
+This chapter will remove the memory model from the threaded C programming model, which is visualized in the overview figure \chapfigpageref.
+Application will have to be modified once to support the memory-model-less programming model, but the application will become portable to any hardware, regardless of the actual memory model of the hardware.
+This approach is in contrast to the optimizations discussed in \cref{c:hardware}, which were applied to the platform transparently.
+
+\glsreset{PMC}
+
+To this extent, this chapter presents \acix{PMC}, which defines
+a memory model (referred to as the \emph{\ac{PMC} model}), and
+an approach to apply this model to an application and any memory architecture, by means of \ix{annotations} to the source code (the \emph{\ac{PMC} approach}).
+Traditionally, a memory model is seen as a contract between hardware and software, and defines the semantics of reads and writes.
+In contrast, we use our memory model as an \emph{\ix{abstraction layer}} that disconnects the application from the underlying hardware.
+The key is that all orderings that are required by the application, are made explicit---the abstraction contains more details than its implementation.
+Then, \ix[glue tooling]{(glue) tooling} can fill in the gap between what the application requires and which orderings are already satisfied by the hardware.
+As a result, porting applications to hardware with another memory model becomes just a compiler setting.
+
+For this, we propose a single, weak, synchronized memory (consistency) model that only defines five memory operations and four types of orderings between them.
+This model
+1)~is strong enough to mimic \acl{SC} when required by the application;
+2)~is weaker than \acl{EC}, because synchronization operations to different memory locations are unordered, unless explicitly specified by fences; and
+3)~allows mapping to all existing hardware, because it is an intersection of all common memory models.
+(We will discuss these models in \cref{s:memory:related}.)
+Since changing a memory model of an existing programming language is impossible---we use C and C++ in our experiments---it is required that the source code is annotated to indicate which orderings are required by the application\footnote{%
+	Although using the \ac{PMC} model natively in the semantics of a new programming language is the best way to go, this is left as future work.}.
+
+The \ac{PMC} approach involves that an application is designed and annotated for the \ac{PMC} model, regardless of the targeted hardware.
+The \ac{PMC} model is designed such that a mapping of the primitives and ordering relations to specific hardware can be designed and verified with relative ease.
+Since all required orderings are made explicit, the platform can use this information to take all measures in either software or hardware to ensure the orderings and synchronization on the hardware at hand, without losing flexibility of optimization of other non-ordered operations.
+The approach is evaluated based on case studies with three memory architectures.
+
+%The structure of this paper is as follows.
+%First, related work is discussed in \cref{s:memory:related}.
+%The basic idea behind \ac{PMC} is presented in \cref{s:memory:problem}.
+%Our solution consists of a memory model (\cref{s:memory:model}) and annotations, which result in an abstraction from the underlying hardware.
+%This allows compiling applications to completely different memory architectures, of which three are discussed in \cref{s:memory:abstraction}: software cache coherency, a \acl{DSM} architecture and one with \aclp{SPM}.
+%As as proof of concept, three applications of the \mbox{SPLASH-2} benchmark set have been annotated and implemented on a 32-core software cache coherent MicroBlaze system in \ac{FPGA}.
+%\Cref{s:memory:case_studies} presents the results, and discusses additional example applications that are mapped to the two other architectures.
+%\Cref{s:memory:conclusion} concludes the paper.
+
+
+\section{The problem with memories}
+
+\label{s:memory:problem}
+
+Porting software to hardware with another memory model can cause very subtle problems.
+\Vref{fig:memory:example_mems} shows an example of this.
+The program of the figure intends to communicate the value 42 from process~1 to~2 via variable \lstinline|X|.
+On a platform that implements \acl{SC}, this program will behave correctly.
+
+\begin{parcodes}%
+\begin{parcol}{.35\linewidth}%
+Initially: \lsticode*[variable=flag]|flag=0|%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,flag}]
+X = 42;
+flag = 1;
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,flag}]
+while(flag!=1)
+	sleep();
+print(X);
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}%
+\begin{parfig}[
+	latency/.style={font=\itshape,inner sep=0,outer sep=1pt},
+]{.6\linewidth}
+	\node[core] (p1) {proc~1};
+	\node[core] (p2) at ($(p1)+(0,-7em)$) {proc~2};
+	\node[memory,anchor=east] (m1) at ($(p1.south)!.5!(p2.north)+(-5em,0)$) {\textit{mem} \\ \lstinline|X|};
+	\node[memory,anchor=west] (m2) at ($(p1.south)!.5!(p2.north)+(5em,0)$) {\textit{mem} \\ \lstinline|flag|};
+	\draw[connection,red]				(p1) edge node[very near start,latency,anchor=south east]{latency: 10} (m1);
+	\draw[connection,green!50!black]	(p1) edge node[very near start,latency,anchor=south west]{latency: 1} (m2);
+	\draw[connection,green!50!black]	(p2) edge node[very near start,latency,anchor=north east]{latency: 2} (m1);
+	\draw[connection,green!50!black]	(p2) edge node[very near start,latency,anchor=north west]{latency: 1} (m2);
+\end{parfig}%
+\caption{A Sequentially Consistent correct program, which breaks on an architecture with two memories}%
+\label{fig:memory:example_mems}%
+\end{parcodes}
+
+However, the program will break when it is run on a hardware architecture that is also depicted in \cref{fig:memory:example_mems}.
+The essence of the problem is that the latency of the write operation by process~1 to the memory that holds \lstinline|X|, is higher than that of \lstinline|flag|.
+When process~2 polls the \lstinline|flag|, it first reads \lstinline|flag| being 1 and then reads \lstinline|X|.
+Because of the high latency of the write of \lstinline|X|, process~2 can read the old value of \lstinline|X| before 42 has arrived in the memory---the program breaks.
+Tracking down this bug is non-trivial by looking at the source code, and could even be more difficult to find when the latencies in the interconnect vary over time.
+The problem cannot be prevented, even if both \lstinline|X| and \lstinline|flag| are declared \lstinline|volatile|, atomic or separated by fence instructions.
+
+The underlying problem in this architecture is that the order of the two writes of process~1 is not guaranteed, as is the case for \acl{SC}.
+The behavior of the memory---which is distributed in this example---is defined by a \ix{memory (consistency) model}, which prescribes the conclusions a \emph{process} can draw when it \emph{observes} state changes of \emph{locations} of the memory and whether different processes must \emph{agree} on these conclusions (see also \cref{s:progmodel:memory}).
+In the example, the conclusion that every process agrees that 42 is visible before the \lstinline|flag| is set, is wrong, even though the write of \lstinline|X| is initiated first.
+Numerous memory models have been proposed throughout the years, of which we will discuss several next.
+
+\subsection{Various memory models}
+\label{s:memory:related}
+
+Memory models can be grouped in two classes: uniform and synchronized.
+\ix[uniform memory model]{Uniform models} have only two operations on the memory, read and write, whereas synchronized models define additional special operations options, usually acquire and release.
+\Vref{fig:memory:taxonomy} presents a taxonomy of several models.
+What all models have in common is that all control and data dependencies local to a process are preserved; a process will always see changes to its variables as the program prescribes.
+The differences of the models lie in how processes see each other's writes.
+We will discuss several models in an informal way to get a grasp about the range of differences among them.
+
+\begin{figure}
+\inputfig[unit=4em]{figures/mem_taxonomy}%
+\caption{Taxonomy of several memory models.
+	Arrows indicate strictness ordering, dashed lines indicate the equivalent strictness of synchronization operations.}%
+\label{fig:memory:taxonomy}%
+\end{figure}
+
+\glsreset{SC}
+
+As discussed before, \acixmc{SC}~\cite{lamport:sequential_consistency} defines that all operations are in a single (possibly run-time dependent) total order.
+That means that every process(or) will agree on the order in which all state transitions occurred.
+Refer to \vref{fig:memory:interleavings:uniform} for an example of a possible interleaving.
+The figure shows three processes, executing read and write operations on two shared variables \lstinline|X| and \lstinline|Y|.
+The processes do not have a control flow that determines the order in which operations of different processes are interleaved.
+A trace in the figure shows per process when operations are executed in time, which progresses from left to right.
+So, every trace shows a specific interleaving of writes, \eg, \lstinline|Y=2|, and reads, \eg, \lstinline|a==X==1|, which means that \lstinline|X| is read and happens to be \lstinline|1|, and is stored in local variable \lstinline|a|.
+Trace~\ref{fig:memory:interleavings:uniform}(a) is a valid execution under the \ac{SC} model; all processes agree that \lstinline|X| and \lstinline|Y| are written in the following sequence: \lsticode|Y=2|, \lsticode|X=1|, \lsticode|Y=1|, and \lsticode|X=2|.
+
+\tikzset{
+	memory trace environment/.code={
+		\portablefigset{unit=1.5em}%
+		\def\memlabel +(##1) ##2;{
+			\path (0,##1) node[inter text] {##2}; }
+		\def\memopstart +(##1) ##2{
+			(0,##1) node[process label] (l) {##2} (l.mid east) }
+		\def\memop[##1] at (##2,##3) ##4{
+			-- (##2\linewidth,##3) node[op mark##1] {} node[op] {##4} }
+		\def\memops +(##1) ##2: ##3;{
+			\draw[->]
+				\memopstart +(##1) {##2}
+				\foreach \pos/\op/\mark in {##3}
+					{\memop[\mark] at (\pos,##1) {\expandafter\lsticode\expandafter|\op|}}
+				-- (.99\linewidth,##1);
+		}
+	},
+	memory trace/.style={
+		memory trace environment,
+		process label/.style={wrap text,anchor=mid west,draw=none,outer sep=1pt,inner sep=0},
+		inter text/.style={process label,anchor=base west},
+		op/.style={wrap text,anchor=south,draw=none,fontB,inner sep=0},
+		op mark/.style={circle,anchor=center,draw=black,fill=white,minimum size=.75ex,inner sep=0},
+		op mark!/.style={op mark,fill=black},
+	},
+}
+
+\begin{parcodes}[t]%
+\begin{parcol}{.15\linewidth}
+Initially: all set to \lstinline|0|
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,Y,a,b}]
+X=1;
+a=X;
+b=Y;
+
+Y=1;
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,Y,c,d,e}]
+Y=2;
+c=Y;
+d=X;
+
+X=2;
+e=X;
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,Y,f,g}]
+f=X;
+g=X;
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}\hfill%
+\begin{parfig}[%
+	memory trace,
+]{.8\linewidth}
+	\memlabel	+(-1)		{(a) Valid under \acs{SC}, \acs{PC}, \acs{PRAM}, \acs{CC}, and \acs*{SlowC}:};
+	\memops		+(-2)		{P1}: {.2/X=1/, .3/a==X==1/, .45/b==Y==2/, .6/Y=1/};
+	\memops		+(-3)		{P2}: {.1/Y=2/, .35/c==Y==2/, .5/d==X==1/, .7/X=2/, .85/e==X==2/};
+	\memops		+(-4)		{P3}: {.25/f==X==1/, .75/g==X==2/};
+	\memlabel	+(-5.5)		{(b) Valid under \acs{PC}, \acs{PRAM}, \acs{CC}, and \acs*{SlowC}, but not under \acs{SC}:};
+	\memops		+(-6.5)		{P1}: {.1/X=1/!, .25/a==X==1/, .4/b==Y==0/!, .55/Y=1/};
+	\memops		+(-7.5)		{P2}: {.2/Y=2/!, .35/c==Y==2/, .5/d==X==0/!, .65/X=2/, .8/e==X==2/};
+	\memops		+(-8.5)		{P3}: {.3/f==X==1/, .6/g==X==1/};
+	\memlabel	+(-10)		{(c) Valid under \acs{PRAM}, \acs{CC}, and \acs*{SlowC}, but not under \acs{SC} and \acs{PC}:};
+	\memops		+(-11)		{P1}: {.1/X=1/!, .2/a==X==1/, .325/b==Y==2/, .425/Y=1/!};
+	\memops		+(-12)		{P2}: {.15/Y=2/, .475/c==Y==1/!, .6/d==X/, .7/X=2/!, .8/e==X==2/};
+	\memops		+(-13)		{P3}: {.75/f==X==2/!, .9/g==X==1/!};
+	\memlabel	+(-14.5)	{(d) Valid under \acs{CC} and \acs*{SlowC}, but not under \acs{SC}, \acs{PC}, and \acs{PRAM}:};
+	\memops		+(-15.5)	{P1}: {.1/X=1/!, .25/a==X==1/, .4/b==Y==0/, .5/Y=1/!};
+	\memops		+(-16.5)	{P2}: {.35/Y=2/, .55/c==Y==1/!, .7/d==X==0/!, .8/X=2/, .9/e==X==2/};
+	\memops		+(-17.5)	{P3}: {.2/f==X==0/, .65/g==X==1/};
+	\memlabel	+(-19)		{(e) Valid under \acs{PRAM} and \acs*{SlowC}, but not under \acs{SC}, \acs{PC}, and \acs{CC}:};
+	\memops		+(-20)		{P1}: {.4/X=1/!, .55/a==X==2/!, .8/b==Y==0/, .9/Y=1/};
+	\memops		+(-21)		{P2}: {.1/Y=2/, .2/c==Y==2/, .35/d==X==0/, .5/X=2/!, .7/e==X==1/!};
+	\memops		+(-22)		{P3}: {.3/f==X==0/, .6/g==X==2/};
+	\memlabel	+(-23.5)	{(f) Valid under \acs*{SlowC}, but not under \acs{SC}, \acs{PC}, \acs{PRAM}, and \acs{CC}:};
+	\memops		+(-24.5)	{P1}: {.15/X=1/!, .5/a==X==2/!, .7/b==Y==0/!, .9/Y=1/};
+	\memops		+(-25.5)	{P2}: {.1/Y=2/!, .2/c==Y==2/, .35/d==X==0/, .45/X=2/!, .6/e==X==1/!};
+	\memops		+(-26.5)	{P3}: {.3/f==X==1/!, .8/g==X==2/!};
+\end{parfig}%
+\caption{Interleavings of operations under different uniform memory models.
+	Particularly interesting sequences of operations are marked by black dots.}%
+\label{fig:memory:interleavings:uniform}%
+\end{parcodes}
+
+In \acixmc{PC}~\cite{ahamad:processor_consistency,mosberger:memory_models}, processes must agree on the writes of one process, and on all writes of all processes to the same variable.
+However, processes can disagree on the order of writes to different locations by different processes.
+Consider trace~\ref{fig:memory:interleavings:uniform}(b).
+Several operations are marked as black dots.
+Focus on these black operations in the trace, as the other operations are not relevant for the example.
+Process~1 observes that \lstinline|X| has been written before \lstinline|Y|, as it reads the initial value of \lstinline|Y| after it wrote \lstinline|X|.
+Process~2 observes exactly the opposite.
+Therefore, the processes disagree on the interleavings of the two writes to \lstinline|X| and \lstinline|Y|.
+Under \ac{SC}, this would not be valid, but as \ac{PC} does not define an order of the two writes of the different processes, it is a valid outcome.
+Hence, \ac{PC} is weaker than \ac{SC}.
+This trace only shows one case where \ac{PC} and \ac{SC} differ, but many more examples could be constructed.
+
+The even weaker \acixmc{CC}~\cite{steinke:unified} defines that all writes to the same variable should be observed in a total order, regardless which process wrote it.
+Take a look at trace~\ref{fig:memory:interleavings:uniform}(d), and focus again on the black operations.
+In this trace, \lstinline|X|'s values will follow the sequence \lstinline|0|, \lstinline|1|, \lstinline|2|.
+Process~1's writes, \lstinline|X=1| and \lstinline|Y=1|, are observed by process~2 in a different order than process~1 wrote it; it first reads \lstinline|Y| being \lstinline|1|, and then sees \lstinline|X| being \lstinline|0|, so process~2 can conclude that \lstinline|Y| was written first.
+This is allowed under \ac{CC}, because \ac{CC} does not define a relation between operations on different locations.
+Since this trace is not valid under \ac{PC}, \ac{CC} is weaker than \ac{PC}.
+
+In contrast to \ac{CC}, \acixmc{PRAM}~\cite{lipton:pram} defines that all writes of the same process should be agreed on instead.
+The interleaving of writes by different processes is not defined.
+Trace~(e) gives an example of process~1 and~2 disagreeing on the last write to \lstinline|X|---process~1 sees \lstinline|X| become \lstinline|2| after it wrote \lstinline|X|, where process~2 sees the opposite.
+Therefore, there is no single order in which the writes happened, so `the' value of \lstinline|X| is undefined.
+\Ac{CC} and \ac{PRAM} are both weaker than \ac{PC}, but their mutual relation is not defined.
+This is also depicted in \vref{fig:memory:taxonomy}.
+
+One might conclude that \acixmc{PC} is the combination of \ac{CC} and \ac{PRAM}.
+However, in its original definition, trace~(c) gives a counterexample.
+The total order on \lstinline|X|, as observed by process~3, turns out to be the sequence \lstinline|0|, \lstinline|2|, and then \lstinline|1|.
+However, there is a causal relation via \lstinline|Y| and process~2 that suggest that this sequence cannot exist, but \ac{CC} and \ac{PRAM} do not prohibit this.
+(Note that the actual value in \lstinline|d| might render this trace invalid for either \ac{CC} or \ac{PRAM}, depending on whether \lstinline|0| or \lstinline|1| is read.
+Therefore, the value is left out of the trace on purpose.)
+Whether this peculiar situation was intended originally, is debatable~\cite{steinke:unified}.
+
+Finally, the weakest model in our discussion is \SlowC*~\cite{hutto:slow_memory}, where only the order of operations of one process to the same variable is guaranteed.
+So, there is a notion about older and newer values, but processes can disagree on the relation between writes of two processes and writes to different variables.
+Imagine this model as that values are distributed `slowly' through the system, and every process receives all writes eventually, although updates are delivered depending on the distance of the writer and the memory location.
+Therefore, when a `newer' value is read, a successive read will not return an `older' value anymore.
+Trace~(f) exemplifies a valid, but hard to use, interleaving of operations: process~1 and~3 disagree on the order of writes to \lstinline|X|, and process~1 sees the writes to \lstinline|Y| and \lstinline|X| of process~2 differently.
+
+\ix[synchronized memory model]{Synchronized models} are more complicated than uniform ones, because there is usually a difference in the guarantees about ordering of ordinary reads and writes, and the special synchronization operations.
+\Citet{steinke:unified} formalized synchronized models as that they have transitions between two different uniform models: a model for reads and writes, and a (usually stronger) model for the synchronization operations.
+\Cref{fig:memory:taxonomy} illustrates this relation.
+The synchronized models have in common that reads and writes are behaving under \SlowC.
+A relatively strong synchronized model is \aclixmc{WC}~\cite{dubois:buffering}, which has only one synchronization operation.
+This operation is ordered like \ac{SC}, and it forms a barrier for reads and writes before and after it.
+
+The acquire and release of \acixmc{RC}~\cite{gharachorloo:release_consistency} behave in a similar manner as reads and writes, respectively, of one variable under \ac{PC}.
+The writes of one process only have to be visible for others after it has executed a release, and writes of other processes only have to be observed after an acquire.
+As a result, updates to the memory only have to be communicated upon acquire from the process that did the last release.
+\Vref{fig:memory:interleavings:release} gives several possible traces.
+
+\begin{parcodes}%
+\begin{parcol}{.15\linewidth}
+Initially: all set to \lstinline|0|
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,Y,a}]
+X=1;
+acquire;
+Y=1;
+release;
+a=Y;
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,Y,b,c}]
+Y=2;
+b=X;
+acquire;
+c=X;
+release;
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}\hfill%
+\begin{parfig}[%
+	memory trace,
+]{.8\linewidth}
+	\memlabel	+(-1)		{(a) Possibly out-of-date \lstinline|b|, guaranteed up-to-date \lstinline|c|:};
+	\memops		+(-2)		{P1}: {.1/X=1/, .2/acq/, .3/Y=1/, .4/rel/, .9/a==Y==2/};
+	\memops		+(-3)		{P2}: {.45/Y=2/, .55/b==X==0/!, .65/acq/, .75/c==X==1/!, .85/rel/};
+	\memlabel	+(-5)		{(b) Final value of \lstinline|Y| is 2, but \lstinline|a| is out-of-date:};
+	\memops		+(-6)		{P1}: {.1/X=1/, .2/acq/, .3/Y=1/!, .5/rel/!, .85/a==Y==1/!};
+	\memops		+(-7)		{P2}: {.25/Y=2/!, .4/b==X==0/, .55/acq/, .65/c==X==1/, .75/rel/!};
+	\memlabel	+(-9)		{(c) \lstinline|Y| is properly overwritten to \lstinline|1|:};
+	\memops		+(-10)		{P1}: {.2/X=1/, .6/acq/!, .7/Y=1/!, .8/rel/, .9/a==Y==1/};
+	\memops		+(-11)		{P2}: {.1/Y=2/!, .25/b==X==1/, .35/acq/, .45/c==X==1/, .55/rel/!};
+\end{parfig}%
+\caption{Valid interleavings of operations under \acl{RC}}%
+\label{fig:memory:interleavings:release}%
+\end{parcodes}
+
+Where \ac{RC}'s acquires and releases are unrelated to specific shared variables, \acixmc{EC}~\cite{bershad:midway} does make this differentiation.
+\Vref{fig:memory:interleavings:entry} gives an example code that has some similarities to \cref{fig:memory:interleavings:release}.
+Like \ac{PC} defines a per-process and per-variable ordering, \ac{EC} does the same with acquires and releases per variable; acquires and releases executed by one process are observed in the order they are executed, regardless on which variable they operate, where acquires and releases on one variable form a total order over all processes.
+Moreover, \ac{EC} requires that all accesses to variables are wrapped either by acquire--release pairs with exclusive access to the variable, or (read-only) non-exclusive pairs.
+The non-exclusive pairs may overlap with other non-exclusive pairs, whereas exclusive access cannot overlap with any other pair operating on the same variable.
+Naturally, the state of the variable that is observed within a non-exclusive pair, is always the state as of the last exclusive access; reads can never be out-of-date, as it can be the case with \ac{RC}.
+
+\begin{parcodes}%
+\begin{parcol}{.45\linewidth}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,Y,a}]
+acquire(X); // exclusive access
+X=1;
+release(X);
+acquire(Y); // exclusive access
+Y=1;
+release(Y);
+acquire$\textsubscript{ro}$(Y); // non-exclusive
+a=Y;
+release$\textsubscript{ro}$(Y);
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}%
+\begin{parcol}{.45\linewidth}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,Y,b,c}]
+acquire(Y); // might overlap
+Y=2;        //  with acquire(X)
+release(Y);
+//b=X; // not allowed outside of
+       //  acquire-release pair
+acquire$\textsubscript{ro}$(X);
+c=X;
+release$\textsubscript{ro}$(X);
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}%
+\caption{Example source code for \acl{EC}}%
+\label{fig:memory:interleavings:entry}%
+\end{parcodes}
+
+A synchronized weak memory model that is tailored towards the streaming application domain, is \ix[Streaming Consistency@\acl*{StrC}]{\acl*{StrC}}\index{memory (consistency) model!Streaming Consistency@\acl*{StrC}}~\cite{brand:streaming_consistency}.
+This model assumes that processes communicate via (circular) buffers.
+An acquire--release pair is related to a buffer, and protects accesses to it, regardless whether it is read or written.
+Corresponding to \ac{EC}, acquires and releases are ordered like \ac{PC}, and accesses to different buffers by different processes are not ordered.
+Because the model makes writers and readers of a buffer explicit, it allows reasoning about functional behavior more easily.
+
+Other weaker models exist, but their usability is limited.
+For example, \acl{GS-LC}~\cite{gao:location_consistency} is one of the weakest synchronized models, but \citet{long:enh_location_consistency} point out that specific algorithms cannot be implemented.
+Although their proposed solution is formally correct, it is impractical to implement because of global dependencies, and it breaks the cache coherency protocol of the original paper.
+%Moreover, \citet{frigo:weakest_memory_model} states that any implementation will result in a stronger model.
+%However, \acl{LC}, as defined by \citeauthor{frigo:weakest_memory_model}, is equivalent to \ac{CC}~\cite{steinke:unified}, and therefore suffer from the same problem as \acl{GS-LC}.
+%Furthermore, \acs{PRAM}~\cite{lipton:pram} is weaker than \ac{PC}, but because certain non-determinism is allowed, programming for it is hard~\cite{frigo:weakest_memory_model}.
+
+The \acix{PMC} model can be characterized as a synchronized memory model, which is weaker than \ac{EC}, but still has its acquire and release operations ordered corresponding to reads and writes of \ac{PC}.
+As the reader might have noticed in understanding the traces of \cref{fig:memory:interleavings:uniform}, reasoning about memory models is notoriously hard.
+Therefore, the memory model should be as strict as possible to make reasoning about it easier, but not stricter than required by the application to allow maximum freedom of optimization in the platform.
+We believe that \ac{PMC} is suitable in this context.
+
+\subsection{\Acsh{PMC}'s basic idea}
+
+The basic idea of our approach is that there are as few implicit constraints of ordering of operations as possible, and that all additional constraints should be defined explicitly in the source code.
+So, the solution is twofold: a weak memory model, and \ix{annotations} for additional \ix{constraints}.
+This memory model, which will be discussed in more detail in \cref{s:memory:model}, can be summarized as that it is only guaranteed that reads and writes from the same process(or) to the same location will be observed in the same order.
+Additionally, the annotations allow a compiler to insert special memory operations, which enforce an order between two operations of different locations by one process (a proper fence), and two operations on the same location by multiple processes (acquire/release).
+
+Regarding the example of \vref{fig:memory:example_mems}, if the source code indicates that the write to \lstinline|X| and \lstinline|flag| should be observed in that specific order, then a compiler or \ac{OS} can enforce it.
+For example, a compiler can insert a read of \lstinline|X| between the writes to \lstinline|X| and \lstinline|flag|.
+Since the read completes after \lstinline|X| has been written, it is guaranteed that every other process will first observe the change to \lstinline|X| and then \lstinline|flag|.
+
+\Ac{PMC} essentially splits the memory model in two layers: one \ix[memory (consistency) model!abstraction]{memory model abstraction}, which is shared among all applications, and the actual memory model of the hardware.
+As a consequence, the strictness of the hardware's memory model becomes just a feature.
+This is similar to having hardware floating-point support in a processor: a programmer can always use floating-point operations in an application, but computation is faster when the hardware supports it (at the cost of increased chip area), otherwise software emulation is used.
+Similar, synchronization can always be used, \eg, by using a bakery lock, but when the memory model of the hardware is stricter, atomic \ac{RMW} operations are faster (at the cost of overly constraining other possible operation interleavings).
+
+In literature, memory models and their usability have been studied widely.
+As discussed in \cref{c:progmodel}, the main motivation for defining different weak memory models is to achieve efficiency of the hardware implementation.
+Nevertheless, these models have a strong mathematical basis.
+Most work focuses on the memory model itself and, to the best of our knowledge, no work directly relates such a formalism to how it is implemented in hardware and used by applications in practice.
+For example, memory models require that the source code is properly labeled (in other words, annotated)~\cite{gharachorloo:release_consistency}, but do not discuss in detail how the annotation should be used.
+In contrast, \ac{PMC} links the memory models to annotations in the source code and to the implementation on concrete hardware.
+
+\Citet{steinke:unified} analyze memory models, and give a taxonomy that is based on the models' common properties.
+They discuss thirteen uniform models (and conclude that there can be more). % and define synchronized models as combinations of the uniform ones.
+Their discussion focuses on formal properties, which do not (easily) allow an implementation.
+In contrast, we describe a concrete implementation of the memory model we present in this chapter.
+
+Integration of a memory model in a programming language is preferable, such that tooling can verify or complement ordering constraints.
+The latest \ix[C++11]{C++} standard (C++11~\cite{C++11}) includes multithreading and defines a memory model.
+It assumes that the programmer can identify variables that should be declared atomic and access it accordingly.
+However, \citet{batty:math_cpp_concurrency} conclude that this model is not clearly defined by the standard, and the corresponding mathematical model might not be `sufficiently widely accessible'.
+Because of the complexity of the model, it is unclear whether it defines the weakest (usable) model.
+Therefore, it is also unclear whether maximum freedom in the execution is allowed, and whether maximum performance can be achieved because of that.
+We define a memory model that we will argue to be the weakest usable model, which simplifies reasoning about behavior, and is practical to implement.
+
+\Citet{hill:simple_memmodel} argues that multiprocessor systems should implement sequential consistency, because the performance increase by relaxed models does not justify the added complexity for `middleware authors'.
+However, the paper does not address many-core systems and scaling issues.
+
+We discuss the memory model, annotations and implementations in more detail in the next three sections.
+
+
+\section{A \aclh{PMC} model}
+
+\label{s:memory:model}%
+\index{program order|seealso{\SYMorderprog}}%
+\index{local order|seealso{\SYMorderlocal}}%
+\index{synchronization order|seealso{\SYMordersync}}%
+\index{fence|seealso{\SYMorderfence}}%
+\index{global order|seealso{\SYMorderglobal}}%
+\index{execution order|seealso{\SYMOrder}}%
+
+In this section, we present a synchronized weak memory model.
+This model is the programmer's view on memory in the \ac{PMC} approach.
+
+\subsection{Fundamentals}
+
+A program defines a partial order of operations, such as reads and writes, on memory locations.
+This order of operations can be represented as a directed acyclic dependency graph.
+This section will define the properties of such a graph.
+In general, different concurrent processes can observe operations in a different order.
+However, the edges in the graph indicate which operations are ordered in time, independent of who observes them.
+These dependencies can partly be determined at compile time, but some parts are only known at run time, due to data dependencies and control flow, for example.
+At run time, all dependencies are known---although such a graph is never actually stored.
+One can see this graph as the complete history of the state of the memory.
+Such a state at run time is an \emph{\ix{execution}} of a program.
+For the base model, we use a notation that is similar to the one as proposed by \citet{steinke:unified}.
+\begin{definition}[Execution]
+	An execution \SYMExec* is a model of the state of a program at one moment in time and is defined as \SYMExecdef, where
+	\begin{itemize}
+	\item \SYMProc* is the set of all processes;
+	\item \SYMVar* is the set of all shared variables, \ie (memory) locations;
+	\item \SYMOp* is the set of all issued operations; and
+	\item The transitive binary relation \SYMOrder* is a partial order on \SYMOp.
+	\end{itemize}
+\end{definition}
+
+Among other details that will be explained further on, \vref{t:memory:operations} lists all operations.
+Reads and writes of a memory location in \SYMVar are atomic.
+In practical systems, usually only reads and writes of bytes are indivisible and thus atomic.
+Handling variables that span multiple bytes is covered in \cref{s:memory:abstraction}.
+The table also lists \emph{patterns}, which are used to select operations with specific properties.
+
+\ctable[
+	caption={Orderings between existing and new operations on location \SYMvar by process \SYMproc},
+	label=t:memory:operations]{clc|*{5}{>{\hspace{-.5ex}}c}}{
+		\tnote[\dag]{An acquire has its ordering \SYMordersync on \SYMrelease[][\SYMvar], not just on releases of the same process.}
+	}{\FL
+&			&									& \multicolumn{5}{c}{new operation} \NN
+&			& pattern							& \SYMopread		& \SYMopwrite		& \SYMoprelease		&  \SYMopacquire				& \SYMopfence		\ML
+%\multirow{5}{*}{\rotatebox{90}{operation}}                                                            
+\multirow{5}{*}{\tikz[baseline=-2pt]{
+	\path[use as bounding box] (-1em,0) rectangle (1em,0);
+	\node[rotate=90,inner sep=0,outer sep=0,anchor=center] (n) at (0,0) {\parbox{15ex}{\centering previous operation}};}}
+& read		& \SYMread[\SYMproc][\SYMvar]		& \SYMorderlocal	& \SYMorderlocal	& \SYMorderlocal	&								& \SYMorderlocal	\NN
+& write		& \SYMwrite[\SYMproc][\SYMvar]		& \SYMorderlocal	& \SYMorderprog		& \SYMorderprog		&								& \SYMorderlocal	\NN
+& acquire	& \SYMacquire[\SYMproc][\SYMvar]	& \SYMorderlocal	& \SYMorderprog		& \SYMorderprog		&								& \SYMorderfence	\NN
+& release	& \SYMrelease[\SYMproc][\SYMvar]	&					&					&					&  {\SYMordersync}\tmark[\dag]	& \SYMorderfence	\NN
+& fence		& \SYMfence[\SYMproc]				&					&					& \SYMorderfence	&  \SYMorderfence				& \SYMorderfence	\LL
+}
+
+\begin{definition}[Pattern]
+	A \ix{pattern}, denoted \memoppattern{\mathrm{operation}}{\SYMproc}{\SYMvar}{\mathrm{value}}, where \mbox{$\SYMproc\in\SYMProc$} and \mbox{$\SYMvar\in\SYMVar$}, is a subset of \SYMOp that matches any \mbox{$\SYMop\in\SYMOp$} that has the specified properties.
+	A \SYMany matches all.
+\end{definition}
+So, the pattern \memoppattern{\SYMopwrite}{}{\SYMvar}{} matches all writes to location \SYMvar by any process, for example.
+Equivalent to \SYMopwrite for a write, \cref{t:memory:operations} lists mnemonics for all other operations.
+Next, the initial state of a program is defined as:
+\begin{definition}[Initialization]
+	An execution \SYMExecdef is initialized, such that \SYMProc contains all processes, \SYMVar contains all locations, and \SYMOrder is empty.
+	All locations have an initial operation that behaves like a write and release.
+	So, \SYMOp is initialized, such that \SYMOpinit, where $\epsilon$ is equivalent to all processes.
+	\label{def:memory:init}
+\end{definition}
+
+\Vref{def:memory:init} states that all locations have an initial operation that is both a write and release.
+As a result, reads and acquires always have a predecessor.
+
+\subsection{Operations by processes}
+
+A program issues \ix[memory operations]{operations} to the memory system.
+All operations that can be executed by any process are listed below.
+\begin{itemize}
+\item \emph{read}: retrieves the value of a previously executed write operation of a specific location.
+\item \emph{write}: replaces the value of a location.
+	Writes do not have to be visible for all processes immediately.
+\item \emph{\ix{acquire}}: gets an exclusive lock on a specific location.
+	An acquire must be followed by a release of the same process.
+	Moreover, mutual exclusion between an acquire and release is guaranteed by the platform.
+\item \emph{\ix{release}}: gives up the exclusive lock on a specific location.
+\item \emph{fence}: adds dependencies to locally executed operations.
+\end{itemize}
+
+The properties of the operations are more formally discussed in \cref{s:memory:operation:properties}.
+When operations are executed, they add orderings to the execution graph that is being constructed.
+\begin{definition}[State transition]
+	When an operation \SYMop on location $\SYMvar\in\SYMVar$ by process $\SYMproc\in\SYMProc$ is executed, the next execution is \SYMExecdef['], where
+	$\SYMOp'=\SYMOp\cup\{\SYMop\}$, and $\SYMOrder'$ extends \SYMOrder such that the ordering rules as indicated in \vref{t:memory:operations} apply to all matching operation patterns and \SYMop.
+\end{definition}
+
+Without explaining those `ordering rules' at this point, \cref{t:memory:operations} defines the rules that are applied between operations.
+For example, when a new write operation is executed, it will add the orderings \SYMorderlocal between all previously executed reads on the same location by the same process and the new write, and it will similarly add the orderings \SYMorderprog between all previous writes and acquires and the new write.
+Therefore, the dependency graph grows by every new operation, and these orderings are never removed.
+The next subsection discusses these different types of orderings in the table in more detail.
+
+\subsection{Orderings: semantics of operations}
+
+\Vref{fig:memory:ordering:program_order} shows a simple program with one process that executes two writes to the same location \lstinline|X|.
+The graph shows that when \lsticode|X=1| is executed, one dependency is added from the initial write.
+This is graphically presented as
+\tikz[baseline=0,font=\footnotesize,depgraph]{
+	\node[pseudo op,anchor=base] (a) at (0,0) {A};
+	\node[pseudo op,anchor=base] (b) at (7ex,0) {B};
+	\path[global] (a) edge node[label left,tight]{\SYMorder[*]} (b);
+}, which indicates that every process observes that A occurred before B, because of the indicated ordering rule, where \SYMorder[*] stands for some specific rule.
+When \lsticode|X=2| is executed, a dependency is added from all previous writes to the new one.
+We will omit the (implicit) initial write in the figures.
+Moreover, the figures are transitively reduced; all redundant orderings are left out of the figures, like the one from the initial write to \lsticode|X=2|.
+The rule in this example is the \emph{\ix{program order}}.
+\begin{definition}[Program order]
+	Program orderings \SYMorderprog* are globally visible orderings between two operations of one process on one location.
+	\label{def:memory:orderprog}
+\end{definition}
+
+\begin{parcodes}%
+\begin{parcode}{.25\linewidth}%
+\begin{lstcode}[variable={X}]
+X = 1;$\label{l:node_po_x1}$
+X = 2;$\label{l:node_po_x2}$
+\end{lstcode}%
+\end{parcode}%
+\begin{pardep}{.6\linewidth}
+	\initnode[at={(0ex,0ex)}]{po_init}{\lsticode|X=|$\bot$}
+	\opnode[at={(15ex,0ex)}]{po_x1}{\lsticode|X=1|}
+	\opnode[at={(30ex,0ex)}]{po_x2}{\lsticode|X=2|}
+	\draw[global] (po_init) edge node[label right]{\SYMorderprog} (po_x1);
+	\draw[global] (po_init) edge[bend left=35] node[label left,very near start]{\SYMorderprog} (po_x2);
+	\draw[global] (po_x1) edge node[label right]{\SYMorderprog} (po_x2);
+\end{pardep}%
+\caption{Program order of two writes}%
+\label{fig:memory:ordering:program_order}%
+\end{parcodes}
+
+\Vref{def:memory:orderprog} implies that writes of one process to different locations can be observed in a different order by different observers.
+Every process observes writes to the same location by one process in the same order, but the effect of the write does not have to be visible instantaneously.
+
+A read will add ordering constraints that are only visible to the \emph{\ix[local order]{local}}, \ie executing, process.
+\Vref{fig:memory:ordering:local_order} gives an example.
+In this case, there is a relation between \lsticode|X=1| and the consecutive read; the compiler or hardware should not reorder these two operations.
+As a result, the read can only return the value 1.
+To determine the value read by a read, one can follow all global dependencies and dependencies that are local to the executing process, in reverse direction until a write is encountered (which is \lsticode|X=1| at \cref{l:node_lo_x1} in the example).
+This last-written value will be properly defined later on.
+
+\begin{definition}[Local order]
+	Locally visible orderings $\SYMorderlocal[\SYMproc]$ are only visible to the executing process \SYMproc.
+\end{definition}
+
+\begin{parcodes}%
+\begin{parcode}{.25\linewidth}%
+\begin{lstcode}[variable={X}]
+X = 1;$\label{l:node_lo_x1}$
+if(X==1)$\label{l:node_lo_rx}$
+	X = 2;$\label{l:node_lo_x2}$
+\end{lstcode}%
+\end{parcode}%
+\begin{pardep}{.6\linewidth}
+	\opnode[at={(0ex,0ex)}]{lo_x1}{\lsticode|X=1|}
+	\opnode[at={(15ex,0ex)}]{lo_rx}{\lstinline|X|?}
+	\opnode[at={(30ex,0ex)}]{lo_x2}{\lsticode|X=2|}
+	\draw[local] (lo_x1) edge node[label right]{\SYMorderlocal} (lo_rx);
+	\draw[local] (lo_rx) edge node[label right]{\SYMorderlocal} (lo_x2);
+	\draw[global] (lo_x1) edge[bend left=35] node[label left,very near start]{\SYMorderprog} (lo_x2);
+\end{pardep}%
+\caption{Local order of a read}%
+\label{fig:memory:ordering:local_order}%
+\end{parcodes}
+
+Graphically, a local ordering is denoted
+\tikz[baseline=0,font=\footnotesize,depgraph]{
+	\node[pseudo op,anchor=base] (a) at (0,0) {A};
+	\node[pseudo op,anchor=base] (b) at (7ex,0) {B};
+	\path[local] (a) edge node[label left,tight]{\SYMorderlocal} (b);
+}, where only the executing process observes A occurring before B.
+All other processes could disagree.
+With this order, all local control dependencies in the program are preserved.
+The reads, writes, local order, and program order, as discussed so far, are equivalent to \SlowC*.
+
+Because the program order \SYMorderprog only orders per process, operations of two processes accessing the same location can be interleaved in any way.
+For inter-process orderings, synchronization is added.
+Synchronization consists of two operations: \emph{\ix{acquire}} and \emph{\ix{release}}, which behave in a mutual-exclusive way.
+\begin{definition}[Synchronization order]
+	\ix[synchronization order]{Synchronization orderings} \SYMordersync* are globally visible, per location orderings that can span multiple processes.
+\end{definition}
+
+\Vref{fig:memory:ordering:sync_order} shows a program with two processes that both try to acquire the same location.
+Depending on which process will get the lock first, process~1 reads either $\bot$ or 2.
+The figure shows how different ordering rules of \vref{t:memory:operations} are applied.
+
+\begin{parcodes}%
+\begin{parcol}{.3\linewidth}%
+%Initially: \lsticode|X=|$\bot$
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,r}]
+acquire(X);$\label{l:node_so_xa2}$
+// critical section
+r = X;$\label{l:node_so_rx}$
+// r is either:
+// (a)  $\color{lst comment color}\ensuremath{\bot}$, or
+// (b)  2
+release(X);$\label{l:node_so_xr2}$
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X}]
+acquire(X);$\label{l:node_so_xa1}$
+// critical section
+X = 1;$\label{l:node_so_x1}$
+X = 2;$\label{l:node_so_x2}$
+release(X);$\label{l:node_so_xr1}$
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}%
+\begin{parcol}{.7\linewidth}%
+\vspace{-1ex}%
+\begin{pardep}{\linewidth}
+	\initnode[at={(0ex,0ex)}]{so_x0}{\lsticode|X=|$\bot$}
+	\opnode[at={($(so_x0)+(0:13ex)$)}]{so_xa2}{acq \lstinline|X|}
+	\opnode[at={($(so_xa2)+(0:13ex)$)}]{so_rx}{\lstinline|X|?}
+	\opnode[at={($(so_rx)+(0:13ex)$)}]{so_xr2}{rel \lstinline|X|}
+	\opnode[at={($(so_x0)+(0,-13ex)$)}]{so_xa1}{acq \lstinline|X|}
+	\opnode[at={($(so_xa1)+(0:13ex)$)}]{so_x1}{\lsticode|X=1|}
+	\opnode[at={($(so_x1)+(0:13ex)$)}]{so_x2}{\lsticode|X=2|}
+	\opnode[at={($(so_x2)+(0:13ex)$)}]{so_xr1}{rel \lstinline|X|}
+	
+	\path[global] (so_x0)  edge node[label left]{\SYMordersync} (so_xa2);
+	\path[global] (so_xa1) edge node[label left]{\SYMorderprog} (so_x1);
+	\path[global] (so_x1)  edge node[label left]{\SYMorderprog} (so_x2);
+	\path[global] (so_x2)  edge node[label left]{\SYMorderprog} (so_xr1);
+	\path[global,out=225,in=45,looseness=.75] (so_xr2) edge node[label left,near start]{\SYMordersync} (so_xa1);
+	\path[local] (so_xa2) edge node[label left]{\SYMorderlocal[1]} (so_rx);
+	\path[local] (so_rx) edge node[label left]{\SYMorderlocal[1]} (so_xr2);
+	\path[global] (so_xa2) edge[bend left=45] node[label left,very near start]{\SYMorderprog} (so_xr2);
+
+	\node[anchor=mid west] at (-10ex,0ex) {(a)};
+\end{pardep}%
+\vspace{1ex}%
+\begin{pardep}{\linewidth}
+	\initnode[at={(0ex,0ex)}]{so_x0}{\lsticode|X=|$\bot$}
+	\opnode[at={($(so_x0)+(0:13ex)$)}]{so_xa2}{acq \lstinline|X|}
+	\opnode[at={($(so_xa2)+(0:13ex)$)}]{so_rx}{\lstinline|X|?}
+	\opnode[at={($(so_rx)+(0:13ex)$)}]{so_xr2}{rel \lstinline|X|}
+	\opnode[at={($(so_x0)+(0,-13ex)$)}]{so_xa1}{acq \lstinline|X|}
+	\opnode[at={($(so_xa1)+(0:13ex)$)}]{so_x1}{\lsticode|X=1|}
+	\opnode[at={($(so_x1)+(0:13ex)$)}]{so_x2}{\lsticode|X=2|}
+	\opnode[at={($(so_x2)+(0:13ex)$)}]{so_xr1}{rel \lstinline|X|}
+	
+	\path[global] (so_x0)  edge node[label left]{\SYMordersync} (so_xa1);
+	\path[global] (so_xa1) edge node[label left]{\SYMorderprog} (so_x1);
+	\path[global] (so_x1)  edge node[label left]{\SYMorderprog} (so_x2);
+	\path[global] (so_x2)  edge node[label left]{\SYMorderprog} (so_xr1);
+	\path[global,out=135,in=315,looseness=.75] (so_xr1) edge node[label right,near start]{\SYMordersync} (so_xa2);
+	\path[local] (so_xa2) edge node[label left]{\SYMorderlocal[1]} (so_rx);
+	\path[local] (so_rx) edge node[label left]{\SYMorderlocal[1]} (so_xr2);
+	\path[global] (so_xa2) edge[bend left=45] node[label left,very near start]{\SYMorderprog} (so_xr2);
+	
+	\node[anchor=mid west] at (-10ex,0ex) {(b)};
+\end{pardep}%
+\end{parcol}%
+\caption{Exclusive access with two processes with a dependency graph for both possible interleavings.
+Regardless of which interleaving happens at run time, every observer agrees on that interleaving.}%
+\label{fig:memory:ordering:sync_order}%
+\end{parcodes}
+
+Until now, it is impossible to enforce orderings between two locations.
+However, a communication pattern as of \vref{fig:memory:example_poll} is very common, where data in \lstinline|X| is communicated by setting a flag, and another process waits until it receives the flag before reading the data.
+For that, a \emph{\ix{fence}}\footnote{%
+	The fences discussed in this section are applied on all locations at once.
+	Without loss of generality, one could offer more complex fences on specific locations for optimization purposes.
+	We do not discuss such kind of fences, as it complicates \ac{PMC}'s memory model abstraction too much.} %
+is needed, which is similar to the fence, \ie memory barrier, instruction of modern processors that force completion of earlier memory operations before later operations are executed.
+\begin{definition}[Fence order]
+	Fence orderings \SYMorderfence* are globally visible, per process orderings that can span multiple locations.
+\end{definition}
+
+\begin{parcodes}%
+\begin{parcol}{.25\linewidth}%
+Initially: \lsticode*[variable=f]|f=0|%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={X,f}]
+acquire(X);$\label{l:node_poll_ax1}$
+X = 42;    $\label{l:node_poll_x}$
+fence();   $\label{l:node_poll_f1}$
+release(X);$\label{l:node_poll_rx1}$
+
+acquire(f);$\label{l:node_poll_af}$
+f = 1;     $\label{l:node_poll_f}$
+release(f);$\label{l:node_poll_rf}$
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{\linewidth}%
+\begin{lstcode}[variable={f,X}]
+while(f!=1)$\label{l:node_poll_fr}$
+	sleep();
+fence();   $\label{l:node_poll_f2}$
+
+acquire(X);$\label{l:node_poll_ax2}$
+print(X);  $\label{l:node_poll_xr}$
+release(X);$\label{l:node_poll_rx2}$
+\end{lstcode}%
+\end{parcode}%
+\end{parcol}%
+\begin{pardep}{.6\linewidth}
+	\opnode[at={(0ex,0ex)}]{poll_ax1}{acq \lstinline|X|}
+	\opnode[at={($(poll_ax1)+(13ex,0)$)}]{poll_x}{\lsticode|X=42|}
+	\opnode[at={($(poll_x)+(14ex,0)$)}]{poll_f1}{fence}
+	\opnode[at={($(poll_f1)+(13ex,0)$)}]{poll_rx1}{rel \lstinline|X|}
+	\draw[global] (poll_ax1) edge node[label left] {\SYMorderprog} (poll_x);
+	\draw[global] (poll_x)   edge[bend left=35] node[label left,very near end] {\SYMorderprog} (poll_rx1);
+	\draw[local]  (poll_x)   edge node[label left] {\SYMorderlocal[1]} (poll_f1);
+	\draw[global] (poll_ax1) edge[bend left=35] node[label left,very near start] {\SYMorderfence} (poll_f1);
+	\draw[global] (poll_f1)  edge node[label left] {\SYMorderfence} (poll_rx1);
+	
+	\opnode[at={(7ex,-12.5ex)}]{poll_af}{acq \lstinline|f|}
+	\opnode[at={($(poll_af)+(13ex,0)$)}]{poll_f}{\lsticode|f=1|}
+	\opnode[at={($(poll_f)+(13ex,0)$)}]{poll_rf}{rel \lstinline|f|}
+	\draw[global] (poll_f1)  edge node[label left,near start] {\SYMorderfence} (poll_af);
+	\draw[global] (poll_af)  edge node[label left] {\SYMorderprog} (poll_f);
+	\draw[global] (poll_f)   edge node[label left] {\SYMorderprog} (poll_rf);
+	
+	\opnode[at={(12.5ex,-25ex)}]{poll_fr}{\lstinline|f|?}
+	\opnode[at={($(poll_fr)+(14ex,0)$)}]{poll_f2}{fence}
+	\draw[local] (poll_fr)   edge node[label left] {\SYMorderlocal[2]} (poll_f2);
+	\draw[implicit] (poll_f) edge (poll_fr);
+	
+	\opnode[at={(5.5ex,-37.5ex)}]{poll_ax2}{acq \lstinline|X|}
+	\opnode[at={($(poll_ax2)+(14ex,0)$)}]{poll_xr}{\lstinline|X|?}
+	\opnode[at={($(poll_xr)+(14ex,0)$)}]{poll_rx2}{rel \lstinline|X|}
+	\draw[global] (poll_f2)  edge node[label left,near start] {\SYMorderfence} (poll_ax2);
+	\draw[local] (poll_ax2)  edge node[label left,near end] {\SYMorderlocal[2]} (poll_xr);
+	\draw[local] (poll_xr)   edge node[label left] {\SYMorderlocal[2]} (poll_rx2);
+	\draw[global] (poll_ax2) edge[bend right=35] node[label right,very near start] {\SYMorderprog} (poll_rx2);
+	
+	\fixboundingbox
+	\draw[global,out=280,in=100,looseness=1.8] (poll_rx1) edge node[label left,near start] {\SYMordersync} (poll_ax2);
+\end{pardep}%
+\caption{Simple multi-core communication example}%
+\label{fig:memory:example_poll}%
+\end{parcodes}
+
+The fence of \cref{l:node_poll_f1} makes sure that \lstinline|f| will be written after process~1 got the lock on \lstinline|X|.
+The fence of \cref{l:node_poll_f2} prevents the compiler from moving the acquire at \cref{l:node_poll_ax2} to before the while loop, where it (potentially) can acquire the lock before \lstinline|X| is written.
+The dotted arrow indicates that when \lstinline|f| is eventually observed being 1, it can be concluded that write of 1 must have been executed before.
+Although none of the ordering rules enforce it, this control dependency is valid, but only locally known to process~2.
+When process~2 acquires \lstinline|X| afterwards, the fences make sure that it will always acquire after process~1 has acquired (and released) it.
+Therefore, it is guaranteed that process~2 will read the value 42.
+
+Note that there is no way for process~2 to make sure the value 42 of \lstinline|X| is read at \cref{l:node_poll_xr} without acquiring it; then there is no chain of dependencies that lead to the write of 42.
+Let us consider what happens when specific annotations would be removed.
+The acquire of \lstinline|f| on \cref{l:node_poll_af} is required, because there is no rule that enforces ordering between the fence on \cref{l:node_poll_f1} and a successive write to \lstinline|f|.
+Similar, without the acquire of \lstinline|X| on \cref{l:node_poll_ax2}, the read of \lstinline|X| would not have to be executed after the fence of \cref{l:node_poll_f2}.
+Moreover, without that acquire, there is no path from the read of \lstinline|X| back to the write of 42; it might read the initial value of \lstinline|X| as well.
+
+Finally:
+\begin{definition}[Global order]\label{def:memory:global_order}
+	The \ix[global order]{globally visible ordering} \SYMorderglobal* on two operations $a,b\in\SYMOp$ is defined such that $a\SYMorderglobal b$ iff $a\SYMorderprog b$, $a\SYMordersync b$, or $a\SYMorderfence b$.
+	All processes always agree on the orderings of \SYMorderglobal, no matter how the effects of the orderings are observed.
+\end{definition}
+\begin{definition}[Execution order]
+	The \ix[execution order]{execution ordering} \SYMOrder* on operations $a,b\in\SYMOp$ is defined such that $a\SYMOrder b$ iff $a\SYMorderglobal b$ or $a\SYMorderlocal b$.
+	So, \SYMOrder is a partial order on the operations \SYMOp of an execution.
+\end{definition}
+
+%\begin{figure}
+%\centering\begin{tikzpicture}[node distance=3ex and 3ex]
+%\node (o) {\before};
+%\node[below left=of o] (g) {\SYMorderglobal};
+%\node[below right=of o] (l) {\SYMorderlocal};
+%\node[below left=of g] (p) {\SYMorderprog};
+%\node[below=of g] (x) {\SYMordersync};
+%\node[below right=of g] (f) {\SYMorderfence};
+%\draw
+%	(o) -- (l)
+%	(o) -- (g)
+%	(g) -- (p)
+%	(g) -- (x)
+%	(g) -- (f);
+%\end{tikzpicture}
+%\caption{Taxonomy of ordering rules}
+%\label{fig:orderings}
+%\end{figure}
+
+%\Cref{fig:orderings} shows the hierarchy of alls sets of orderings.
+Because now processes can have different views on the orderings, the point of view is included in the ordering relation.
+For two operations $a,c\in\SYMOp$, we use the shorthand notation $a\before c$ for describing $a\SYMorderglobal c$---the local orderings are not included, as the notation does not indicate the point of view.
+Additionally, $a\before[\SYMproc]c$ says that a sequence of operations can be found between $a$ and $c$ that are either ordered via \SYMorderglobal or \SYMorderlocal[\SYMproc].
+In other words, this relation can recursively be defined as:
+	$a\before[\SYMproc]c$ iff $
+	\exists b\in\SYMOp:
+	a\SYMorderglobal b $ or $a\SYMorderlocal[\SYMproc]b$, and $b \beforeeq[\SYMproc] c$.
+Intuitively, $b\beforeeq[\SYMproc] c$ is shorthand notation for $b\before[\SYMproc]c \vee b=c$.
+
+\subsection{Observing slowly}
+\label{s:memory:operation:properties}
+
+Based on the ordering rules above, various properties of the operations can be defined more precisely.
+The last write operation of a location is the one that you first encounter when following the dependency graph in reversed direction.
+\begin{definition}[Last write]
+	The last write to $\SYMvar\in\SYMVar$ before operation $c\in\memoppattern{}{\SYMproc}{\SYMvar}{}$ is denoted
+	$\SYMlastwrite[c]=\{a\in\SYMwrite[][\SYMvar] \mvert a\before[\SYMproc] c\wedge\nexists b\in\SYMwrite[][\SYMvar]:a\before[\SYMproc] b\before[\SYMproc] c\}$.
+\end{definition}
+% In the PMC paper, the orderings did not include the \SYMproc scope.
+% I'm not sure why this was left out, I'm not sure whether it is required to put it in either.
+
+\SYMlastwrite* cannot be empty, because the initial write is included at least.
+If \SYMlastwrite contains multiple writes, reading the location is non-deterministic; a data race occurred.
+This leads to the conclusion that for a deterministic application, all writes to a single location must be in total order.
+As \vref{t:memory:operations} shows, ordering between writes to the same location of two processes is only possible via acquires and releases, since \SYMordersync is the only ordering that spans multiple processes.
+Therefore, all writes must be enclosed by an acquire and release---but a single acquire--release pair might contain multiple writes.
+
+\begin{definition}[Read value]
+	A read operation $r\in\SYMOp$ by process \SYMproc from location \SYMvar returns either the last written value before $r$, or any value written afterwards.
+	%If process \SYMproc reads from location \SYMvar, this read operation r can return any value that has not been superseded by any operation $\before[\SYMproc]r$.
+	So, $r$ can read \mbox{$\{\SYMvalue[b]\mvert b\in\SYMwrite[][\SYMvar] \wedge \forall a\in\SYMlastwrite[r]: a\beforeeq[\SYMproc] b\}$}, where \SYMlastwrite[r] is the last write to $r$.
+	However, when two read operations $r\before[\SYMproc]r'$ by the same process read the same location, written by operations $w$ and $w'$, respectively, then this implies $w\beforeeq[\SYMproc] w'$.
+\end{definition}
+So, a read can return an already overwritten value, because writes slowly propagate through the system.
+However, it is impossible to return an older value when previously a newer value has been returned.
+A formal description of such an observer function is given by \citet{frigo:weakest_memory_model}.
+
+In \vref{fig:memory:example_poll}, process~2 polls the flag.
+However, there is no control over when the write of process~1 arrives at process~2.
+It makes sense that a platform provides a \emph{flush} function that makes writes globally visible sooner, but because the flush cannot be used to guarantee ordering, this is more a convenience; it is not part of the memory model.
+
+\subsection{Comparison to existing models}
+\label{s:memory:compare_model}
+
+As stated above, the orderings and behavior of the read and write operations of \ac{PMC} are identical to \SlowC*.
+In literature, the globally observable orderings \SYMorderglobal*, as defined by \cref{def:memory:global_order}, are defined similarly but named differently:
+\begin{enumerate}
+\item \SYMorderprog*, combined with \SYMordersync*, results in an ordering per location that spans multiple processes, which is equivalent to \acix{GDO}, as defined by \citet{steinke:unified}; and
+\item \SYMorderfence* is an ordering per process that spans multiple locations, which is equivalent to \acix{GPO}~\cite{steinke:unified}.
+\end{enumerate}
+
+For most synchronized relaxed models, \SlowC is assumed for reads and writes, and then different flavors of synchronization are added.
+When the writes to shared variables are wrapped in an acquire--release pair---which is necessary in order to be \acl{DRF}---the writes to a single location are in total order.
+As a result, the behavior is identical to \aclixmc{CC}; a total order of writes per location and `slow reads', where values propagate slowly through the systems. %, so it takes a while until new values are read.
+However, just having \ac{CC} is not enough to implement the communication in \vref{fig:memory:example_poll}; fences are required.
+If one would add a fence between every operation, the model is equivalent to \acixmc{PC}; a total order of all writes per location (\ac{GDO}) and total order of all writes per process (\ac{GPO}). %, and slow reads.
+
+We argue that it is highly desirable that the platform supports both \ac{GPO} (\ie fences) and \ac{GDO} (\ie acquire--release pairs).
+Without \ac{GDO}, which is the case for \acixmc{PRAM}, non-deterministic execution cannot be confined and writing applications becomes extremely hard~\cite{frigo:weakest_memory_model}.
+However, without \ac{GPO}, it is not possible to simulate \aclixmc{SC}~\cite{wallace:location_consistency}.
+Relaxing the total order requirement of \ac{GDO} to a partial order is proposed by \citet{gao:location_consistency}, but any implementation of it will be stronger~\cite{frigo:weakest_memory_model}.
+So, both \ac{GDO} and \ac{GPO} are required to be usable, which is precisely what our model is based on.
+
+Because it is possible in our model to apply all ordering constraints required to behave like \ac{PC}, our model can benefit of all properties of \ac{PC}, such as that it is able to simulate \ac{SC} for data-race-free programs~\cite{gharachorloo:release_consistency,ahamad:processor_consistency}.
+However, our model allows specifying only the essential orderings, where \ac{PC} overly constrains the possible orderings.
+Compared to \aclixmc{EC}, our model is weaker, because of two additional relaxations:
+\begin{enumerate}
+\item acquire--release pairs of different locations by the same process are not ordered, unless a fence is applied; and
+\item exclusive access (between acquires and releases) is allowed concurrently to read-only access.
+\end{enumerate}
+
+
+\section{Annotation and abstraction}
+\label{s:memory:abstraction}
+
+% memory model abstraction = any annotation
+% efficient memory model abstraction = flexible (=weak) memory model + corresponding annotation
+
+Ideally, the \acix{PMC} memory model, as discussed in \cref{s:memory:model}, should be the native model of a programming language, and the semantics of that language should only define orderings of the model.
+In that case, the language's syntax can help programmers to specify all required orderings, such that fewer errors are made.
+For now, such a language does not exist, so we introduce annotations that can be used in (existing) C programs.
+Adding ordering information by means of annotations is essential in the \ac{PMC} approach.
+
+\subsection{Front-end: annotations in source code}
+\label{s:memory:annotations}
+
+Accesses to non-shared objects do not have to be annotated.
+%The reads and writes of shared objects itself do not have to be annotated either.
+As stated before, all writes to shared objects should be wrapped in an acquire--release pair to prevent data races\footnote{%
+	In this chapter, we assume that data races should be prevented.
+	\Cref{c:concurrency} will discuss that this does not necessarily have to be the case.
+	In \cref{s:concurrency:memory}, the set of annotations is extended to support specific data races.}.
+To obtain symmetry in access pairs, \emph{all} reads and writes should be wrapped, in either an entry--exit pair with exclusive read--write access or non-exclusive read-only access, similar to the acquire--release pairs of \ac{EC}.
+Together with reads and writes, the \ix{annotations} below cover all operations of \vref{t:memory:operations}.
+\begin{itemize}
+\item \annix{entry_x}[(X)]:
+	Issues an \ix{acquire} operation on \lstinline|X|.
+	An \ann{entry_x} should be paired with an \ann{exit_x}.
+\item \annix{exit_x}[(X)]:
+	Issues a \ix{release} operation on \lstinline|X|.
+	During an \ann{exit_x}, all writes to \lstinline|X| do not necessarily have to be notified to others.
+	An implementation could do a `lazy release', which keeps all modifications to \lstinline|X| local, until another process does an acquire of \lstinline|X|.
+	An eager release implementation would do a \ann{flush}[(X)] (see below) before giving up the lock on \lstinline|X|.
+\item \annix{entry_ro}[(X)]:
+	Marks the start of non-exclusive \ix{read-only access} to \lstinline|X|.
+	In the implementation of this call, the system could take some effort to retrieve updates of \lstinline|X|.
+	An \ann{entry_ro} should be paired with an \ann{exit_ro}.
+\item \annix{exit_ro}[(X)]:
+	Marks the end of read-only access to \lstinline|X|.
+\item \annix{fence}:
+	Issues a \ix{fence} operation.
+	This should also prevent the compiler from reordering code and issuing proper fence instructions for an out-of-order processor.
+\item \annix{flush}[(X)]:
+	Because an \ann{exit_x}[(X)] is lazy, a \ix{flush} of \lstinline|X| forces modifications to \lstinline|X| to become globally visible.
+	Concurrent read-only accesses then can receive the update.
+	This is a best-effort operation, so there are no guarantees that all processes actually observe the modifications within a specific amount of time.
+	It is only allowed to flush an object within \ann{entry_x} and \ann{exit_x}.
+\end{itemize}
+
+When these annotations are properly applied to the example of \vref{fig:memory:example_poll}, the resulting source code is shown in \vref{fig:memory:example_poll_annotated}.
+The \ann{flush}[(f)] is added to make sure that process~2 will read the value 1 eventually.
+A flush of \lstinline|X| is not needed, because the acquire of \lstinline|X| will always get the latest modifications.
+%There are some variants possible of the code; the fence and flush operations can be changed a few lines.
+
+\begin{parcodes}%
+Initially: \lsticode*[variable=f]|f=0|%
+\begin{parcode}{.4\linewidth}%
+\begin{lstcode}[variable={X,f}]
+entry_x(X);
+X = 42;
+fence();
+exit_x(X);
+
+entry_x(f);
+f = 1;
+flush(f);
+exit_x(f);
+\end{lstcode}%
+\end{parcode}%
+\begin{parcode}{.4\linewidth}%
+\begin{lstcode}[variable={f,poll,X,r}]
+do{
+	entry_ro(f);
+	poll = f;
+	exit_ro(f);
+}while(poll!=1);
+fence();
+
+entry_x(X);
+r = X;
+exit_x(X);
+\end{lstcode}%
+\end{parcode}%
+\caption{Properly annotated source code of \vref{fig:memory:example_poll}}%
+\label{fig:memory:example_poll_annotated}%
+\end{parcodes}
+
+The annotations are applied to shared objects of any size, which conflicts with the memory model.
+Recall, the memory model of \cref{s:memory:model} assumes operations on variables of atomic locations, which must be just one byte.
+Most real-life data structures are larger than that, like a \lstinline|struct| or a \lstinline|double| on a 32-bit machine.
+In general, when such a \ix{multi-byte object} is read, it is required that one protects the object with a mutex to prevent reading the new first half of the double and the old second half, for example.
+Hence, the compiler that processes the annotations must decide whether locking is required for read-only access.
+Although this decision is easy, it influences efficiency of the program.
+
+With annotations in place (either by the programmer or a compiler), all information about the essential ordering of the application is available.
+Using this information, it is possible to map the application to the platform at hand.
+
+\subsection{Back-end example: three views on \Starburst}
+
+Given the annotations of above, we claim that it is possible to map the application to any common multiprocessor hardware architecture, regardless of its supported memory model.
+For a sequential consistent system, the implementation of the annotations is trivial; mutual exclusion is still required for the entry--exit pairs, but all other annotations can safely be ignored, because the \ac{SC} hardware already takes care of it.
+
+%\begin{figure}
+%\small\centering
+%\begin{tikzpicture}[
+%	noc/.style={shape=cloud,draw,cloud puffs=11,cloud ignores aspect,thick,draw=blue!35,fill=blue!90!green!10},
+%	component/.style={draw,rounded corners=1pt},
+%	tile/.style={component,fill=yellow!25,draw=yellow!25!black},
+%	mem/.style={component,text width=10.5ex,text centered,minimum height=3.25em,inner sep=1ex,fill=black!10,draw=black!50},
+%	proc/.style={mem,draw=black,fill=yellow!50},
+%	bus/.style={draw,line width=.5ex},
+%	link/.style={draw,thick},
+%	path/.style={link,-latex},
+%	port/.style={draw,fill=black,circle,minimum size=1ex,inner sep=0},
+%]
+%\node[noc] (noc) {\strut\acs{NoC}};
+%\node[tile,inner sep=0] (mb0) at ($(noc) ! 5 ! (noc.0)$) {\tikz{
+%	\node[mem,anchor=north east,font=\itshape] (mem) at (-2ex,0) {\strut dual-port memory};
+%	\node[proc,anchor=north west] (proc) at (2ex,0) {\strut MicroBlaze};
+%	\draw[bus] (mem) edge node[inner sep=0,outer sep=3pt,anchor=80,font=\scriptsize] {bus} (proc);
+%	\path[use as bounding box] ($(current bounding box.north west)+(-1ex,3ex)$) rectangle ($(current bounding box.south east)+(1ex,-1ex)$);
+%	\node[port] (port) at (0,3ex) {};
+%	\draw[path] ($(mem)!.5!(proc)$) -- (port);
+%	\draw[path] (port) -- (mem.north);
+%	\node[anchor=north west,font=\scriptsize,inner sep=0,outer sep=3pt] at (port) {write-only};
+%	\draw[path] ($(mem.east)!.85!(proc.west)$) -- ($(mem.south east)!.85!(proc.south west)$) -- +(0,-3ex)
+%		node[anchor=north,inner sep=0,outer sep=1pt,font=\scriptsize] {\acs{SDRAM}};
+%}};
+%\node[anchor=north west] at (mb0.north west) {tile 0};
+%\node[tile] (mb1) at ($(noc) ! 2   ! (noc.100)$) {tile 1}; \draw[link] (noc) edge (mb1);
+%\node[tile] (mb2) at ($(noc) ! 2.5 ! (noc.160)$) {tile 2}; \draw[link] (noc) edge (mb2);
+%\node[tile] (mb3) at ($(noc) ! 2.1 ! (noc.190)$) {tile 3}; \draw[link] (noc) edge (mb3);
+%\node       (mbi) at ($(noc) ! 2.5 ! (noc.230)$) {...};    \draw[link] (noc) edge (mbi);
+%\node[tile] (mbn) at ($(noc) ! 1.8 ! (noc.280)$) {tile $n$}; \draw[link] (noc) edge (mbn);
+%\path[use as bounding box] ($(current bounding box.north west)+(0ex,1.1ex)$) rectangle ($(current bounding box.south east)+(0ex,-1.5ex)$);
+%\draw[link,out=65] (noc) edge (mb0.north);
+%\end{tikzpicture}
+%\caption{Distributed memory architecture, with write-only access to other's local memory}
+%\label{fig:ring}
+%\todo[inline]{move to chapter 2}
+%\end{figure}
+
+We study the implementation of the annotations for hardware that implements a weaker memory model.
+For this, we use the 32-core \Starburst* system.
+This architecture is used to demonstrate three different memory systems:
+\begin{enumerate}
+\item a \ix[software cache coherency]{software-cache-coherent} multiprocessor system (and the direct core-to-core ring and local memories inside the tiles are not used for data);
+\item a \acix{DSM} architecture, where all local memories are kept coherent via the ring, such that they form a shared memory (and the \ac{SDRAM} is not used for inter-core communication); and
+\item a setup where the local memory is used as \acix{SPM} to hold a copy of the data that primarily resides in \ac{SDRAM} (and the ring is not used for data).
+\end{enumerate}
+
+At first glance, it seems non-trivial to use these three completely different architectures as \subacix{PMC}{back-end} of the same memory model.
+However, the implementation of the annotations for these architectures is listed in \vref{t:memory:implementation} and will be discussed below.
+For the experiments, we designed a single C++ interface that defines the annotations, where the implementation, \ie back-end, can be changed transparently to the application.
+
+\ctable[
+	caption={Implementation of \acs{PMC} annotations on different memory architectures},label={t:memory:implementation},
+	pos=p,sideways,
+	doinside={\small\flippage\let\linewidth\textheight},
+	]{l*{3}{|p{.2773\linewidth}}}{}{
+\FL
+\emph{annotation} & \emph{Software cache coherency} & \emph{\acs{DSM} over write-only interconnect} & \emph{\acs{SPM} and \acs{SDRAM}} \ML
+read/write
+& \multicolumn{3}{p{.878\linewidth}}{
+	By design, the \MicroBlaze* implements (at least) \SlowC*.
+	It exhibits in-order execution, and no interconnect reorders operations of one processor.
+	So \SYMorderlocal* and \SYMorderprog* between reads and writes are satisfied by the hardware.} \ML
+\annix{fence}[]
+& \multicolumn{3}{p{.878\linewidth}}{
+	Because the \MicroBlaze is in-order, the fence only controls reordering by the compiler, and does not emit any instructions.
+	So \SYMorderlocal and \SYMorderfence* between fences and other operations are satisfied by the hardware.} \ML
+\annix{entry_x}[]
+& \multicolumn{3}{p{.878\linewidth}}{
+	Exclusive access is enforced by acquiring a lock on a mutex that is related to the object that is protected.
+	\SYMordersync is implemented using the distributed lock (see \cref{s:hardware:distlock}).
+	To ensure \SYMorderprog between the acquire and successive operations, when the lock is transferred to another process\ldots
+	} \vspace{3pt} \NN
+&	\ldots the object is flushed from the cache.
+	So, the object does not reside in the cache outside of any entry--exit pair.
+&	\ldots the local version of the object is written to the local memory of the acquiring process.
+&	\ldots the acquiring process makes a local copy of the object's version in the \acs{SDRAM}. \ML
+\annix{exit_x}[]
+& \multicolumn{3}{p{.878\linewidth}}{
+	Releases the lock on the object.
+	Because the \MicroBlaze is in-order, \SYMorderprog between the release and preceding operations is automatically guaranteed by the hardware.} \NN
+& \multicolumn{2}{l|}{} &
+	First, the data is copied back to \acs{SDRAM}. \ML
+\annix{entry_ro}[]
+& \multicolumn{2}{p{.578\linewidth}|}{
+	When the object is \lstinline|const| or its size is one byte, it does nothing.
+	Otherwise, it acquires a lock on the object such that concurrent access by \ann{entry_x} is prevented. }
+&	Makes a local copy of the object.
+	If the object is larger than one byte, the object is locked before copying and unlocked afterwards. \ML
+\annix{exit_ro}[]
+&	Flushes the corresponding cache lines and releases the lock if \ann{entry_ro} locked it.
+&	Releases the lock if \ann{entry_ro} locked it, otherwise does nothing.
+&	Discards the local copy. \ML
+\annix{flush}[]
+&	Flushes the corresponding cache lines.
+&	Makes a copy of the object in the local memory to all other local memories.
+&	Copies the object back to \acs{SDRAM}. \LL
+}
+
+The first setup relies on properly flushing the caches.
+The cache of the \MicroBlaze* is only capable to either invalidate dirty data in the cache, or flush dirty data and invalidate it afterwards.
+So, it is not possible to reconcile a dirty cache line, without also removing it from the cache.
+All shared objects are aligned to a cache line by compiler directives and cannot overlap with other objects.
+The second column of \cref{t:memory:implementation} describes how the annotations are implemented for software cache coherency.
+This protocol resembles the \textsc{Backer} cache coherency protocol~\cite{blumofe:dag_consistency}.
+
+In the \ac{DSM} setup, the software must write local updates of the data to another's local memory via the (write-only) ring.
+When this is done properly, all local memories hold the same data and the \MicroBlazes see the local memory as one single shared memory.
+The third column of \cref{t:memory:implementation} shows the implementation to achieve this.
+Although reading each other's local memory is impossible, this shows that write-only access is sufficient to make memories coherent.
+
+Finally, the \ac{SPM} setup makes a local copy of the \ac{SDRAM} for local processing.
+When the application is finished using the data, it is either copied back to main memory or discarded, depending on whether the data has changed.
+Although \acp{SPM} often require compiler support for higher efficiency, we chose to manage it at run time, because of simplicity of the implementation.
+
+A single C++ interface might sound to introduce a lot of overhead.
+However, templates allow compile-time analysis of the types and operations on them, which lead to a highly optimized implementation.
+Let us discuss the implementation of software cache coherency on the \MicroBlaze.
+\Vref{lst:memory:swcc_implementation_cpp} shows a test program that wraps accesses to different types of variables in an \ann{entry_ro}--\ann{exit_ro} scope within the function \lstinline|test()|.
+Three types of objects are tested: a constant \lstinline|int|, a normal \lstinline|int|, and a 64-bit \lstinline|long long| (\lstinline|int|).
+
+\begin{lstcode}[float,caption={Implementation outline of the annotations for software cache coherency},
+	label={lst:memory:swcc_implementation_cpp},
+	variable={o,a,b,c},
+	constant={value},
+	type={type_is_const,type_is_ptr,type_is_like},
+	template={T,T1,T2},
+]
+template <typename T> struct type_is_const			  { enum{value=false}; };
+template <typename T> struct type_is_const<T const>   { enum{value=true};  };
+
+template <typename T> struct type_is_ptr			  { enum{value=false}; };
+template <typename T> struct type_is_ptr<T*>		  { enum{value=true};  };
+template <typename T> struct type_is_ptr<T* const>	  { enum{value=true};  };
+
+template <typename T1,typename T2> struct type_is_like{ enum{value=false}; };
+template <typename T> struct type_is_like<T,T>		  { enum{value=true};  };
+template <typename T> struct type_is_like<const T,T>  { enum{value=true};  };
+// ...volatile qualifier support omitted
+
+#define type_is_word(o)								\
+	(   type_is_like<o,char>::value				||	\ 
+		type_is_like<o,short>::value			||	\
+		type_is_like<o,int>::value				||	\
+		type_is_like<o,long>::value				||	\
+		type_is_like<o,unsigned int>::value		||	\
+		...
+		type_is_like<o,float>::value			||	\
+		type_is_ptr<o>::value						\
+	)
+
+// Implementation of several annotations
+template <typename T> void flush(T& o){
+    if(!type_is_word(typeof(o)))
+		do_flush_dcache_line(&o);
+    else
+		do_flush_dcache_range(&o,sizeof(o));
+}
+template <typename T> void entry_ro(T& o){
+    if(!type_is_const<typeof(o)>::value && sizeof(o)>1)
+		lock(&o);
+}
+template <typename T> void exit_ro(T& o){
+    flush(o);
+    if(!type_is_const<typeof(o)>::value && sizeof(o)>1)
+		unlock(&o);
+}
+
+// Test program
+template <typename T> void test(T& o){
+    entry_ro(o);
+    printf("%d\n",(int)o);
+    exit_ro(o);
+}
+
+int main(){
+	int const a=1;		test(a);$\label{l:memory:swcc_implementation_testa}$
+	int b=2;			test(b);
+	long long c=3;		test(c);
+}
+\end{lstcode}\voidbox{)}% make Vim's syntax highlighting happy
+
+An outline of the implementation of the entry and exit annotations is also presented in the listing.
+In conformance to \cref{t:memory:implementation}, \ann{entry_ro} checks the \lstinline|const|ness and size of the object \lstinline|o|, and calls (\textit{br}anches to) \lstinline|lock()| when appropriate.
+Assume that \lstinline|lock()| (and its counterpart \lstinline|unlock()|) take a lock on a mutex that is associated to the object.
+\ann{exit_ro} behaves similarly, but \ann{flush}es the object first from the data cache.
+Flushing the data cache can be done on a per-cache line basis.
+In contrast to x86, the \MicroBlaze requires that all word-sized variables are aligned to the size of a word.
+Therefore, \ann{flush} checks whether the object is of such a type.
+Then, it either flushes the specific cache line the object's word resides in, or iterates over the memory range of the object, as it might overlap multiple cache lines.
+Checking the type is implemented using typical C++ partial template specialization trickery, which are completely evaluated at compile time.
+Therefore, these type checks are eliminated from the resulting binary.
+
+To show the actual introduced overhead of the annotations, \vref{lst:memory:swcc_implementation_asm} lists the \MicroBlaze assembly output of the compiler for the three different data types.
+The listing shows the three \lstinline|test()| implementations side-by-side.
+The left-most function, which corresponds to \cref{l:memory:swcc_implementation_testa} of \cref{lst:memory:swcc_implementation_cpp}, shows that no assembly is generated for \ann{entry_ro}.
+Only flushing the object by \ann{exit_ro} leads to one instruction: a \lstinline|wdc.flush| (\textit{w}rite to \textit{d}ata \textit{c}ache; \textit{flush} the line to memory) of the memory address in register \lstinline|r19|, which contains the address of \lstinline|a|.
+
+\begin{lstcols}{3}
+\begin{lstcode}[
+	lst={language={},comment=[s]{/*}{*/},morecomment=[l]{//}},
+	variable={r1,r3,r4,r5,r15},
+	type={r19},
+	constant={r0},
+]
+// test(int const& a)
+// function prologue
+addik     r1, r1, -32
+swi       r19, r1, 28
+swi       r15, r1, 0
+addk      r19, r5, r0
+
+// entry_ro
+
+
+
+// call printf()
+...
+
+// exit_ro
+wdc.flush r19, r0
+
+
+
+
+
+
+
+
+
+
+
+// function epilogue
+lwi       r15, r1, 0
+lwi       r19, r1, 28
+rtsd      r15, 8
+addik     r1, r1, 32
+// test(int& b)
+// function prologue
+addik     r1, r1, -32
+swi       r19, r1, 28
+swi       r15, r1, 0
+addk      r19, r5, r0
+
+// entry_ro
+brlid     r15, lock$\label{l:memory:swcc_implementation_asm:lock}$
+nop
+
+// call printf()
+...
+
+// exit_ro
+wdc.flush r19, r0
+brlid     r15, unlock$\label{l:memory:swcc_implementation_asm:unlock}$
+addk      r5, r19, r0
+
+
+
+
+
+
+
+
+
+// function epilogue
+lwi		  r15, r1, 0
+lwi       r19, r1, 28
+rtsd      r15, 8
+addik     r1, r1, 32
+// test(long long& c)
+// function prologue
+addik     r1, r1, -32
+swi       r19, r1, 28
+swi       r15, r1, 0
+addk      r19, r5, r0
+
+// entry_ro
+brlid     r15, lock
+nop
+
+// call printf()
+...
+
+// exit_ro
+andi      r3, r19, -32
+brid      .loop
+addik     r4, r19, 8
+.flush:$\label{l:memory:swcc_implementation_asm:flush_start}$
+wdc.flush r3, r0
+addik     r3, r3, 32
+.loop:
+cmpu      r5, r4, r3
+blti      r5, .flush$\label{l:memory:swcc_implementation_asm:flush_end}$
+brlid     r15, unlock
+addk      r5, r19, r0
+
+// function epilogue
+lwi       r15, r1, 0
+lwi       r19, r1, 28
+rtsd      r15, 8
+addik     r1, r1, 32
+\end{lstcode}%
+\caption{\MicroBlaze assembly of software cache coherency annotations}%
+\label{lst:memory:swcc_implementation_asm}%
+\end{lstcols}
+
+The second version of \lstinline|test()| does lock and unlock the object \lstinline|b|, as its contents are not constant.
+As a result, the assembly output is similar to the implementation of \lstinline|test(a)|, but adds a function call to \lstinline|lock()| and \lstinline|unlock()| on \cref{l:memory:swcc_implementation_asm:lock,l:memory:swcc_implementation_asm:unlock}.
+Finally, the right-most assembly output corresponds to \lstinline|test(c)|.
+This version also locks the object, but flushing the object takes somewhat more effort.
+As the data type is \lstinline|long long|, it requires two words, which might reside in different cache lines.
+Therefore, flushing the cache requires a loop that iterates over the object's memory range.
+This can be recognized in lines~\ref{l:memory:swcc_implementation_asm:flush_start} to~\ref{l:memory:swcc_implementation_asm:flush_end}:
+the cache line corresponding to the memory address stored in register \lstinline|r3| is flushed, as long \lstinline|r3| does not reach the end of the memory region, using increments of the size of the cache line of 32~bytes---\lstinline|blti| stands for \textit{b}ranch when \textit{l}ess \textit{t}han.
+
+These three versions of \lstinline|test()| show that the binary is highly optimized.
+The overhead of flushing a cache line can be reduced to just the flush instruction itself for most primitive types.
+Locking, however, will require more time, as discussed in the previous chapter.
+
+In retrospect, the \ac{PMC} memory model allows \emph{abstraction} of the memory model of the hardware.
+The different implementations, as discussed above, show how software \emph{complements} the memory model of the hardware to deliver the required guarantees to the application.
+The next section discusses the implementation of applications on the \ac{PMC} memory model, and are portable to any of the aforementioned three architectures.
+
+
+\section{Case study}
+
+\label{s:memory:case_studies}
+
+%Error in eLC: fence between arbitrary memory operations limits pomset, which violates LC cache protocol Gao2000 proof theorem 4.1, clause 3.a.
+%Solution: fence only forces order between acquires and releases, not all memory operations.
+
+As a case study, we implemented applications for \ac{PMC} for the three architectures of the previous section to show the feasibility of the approach.
+
+\subsection{Software cache coherency: \SPLASH benchmark}
+\label{s:memory:cache}
+
+%consistency:
+%\begin{itemize}
+%\item In classical deductive logic, a consistent theory is one that does not contain a contradiction (wikipedia)
+%\item The condition of standing or adhering together, or being fixed in union, as the parts of a body; existence; firmness; coherence; solidity. (dict.org)
+%\item Agreement or harmony of all parts of a complex thing among themselves, or of the same thing with itself at different times; the harmony of conduct with profession; congruity; correspondence; as, the consistency of laws, regulations, or judicial decisions; consistency of opinions; consistency of conduct or of character. (dict.org)
+%\end{itemize}
+%
+%coherency:
+%\begin{itemize}
+%\item The exact nature and meaning of the memory coherency is determined by the consistency model that the coherence protocol implements.  (wikipedia)
+%\item Connection or dependence, proceeding from the subordination of the parts of a thing to one principle or purpose, as in the parts of a discourse, or of a system of philosophy; a logical and orderly and consistent relation of parts; consecutiveness. (dict.org)
+%\end{itemize}
+
+The first case study maps applications to the 32-core \MicroBlaze system and focuses on adding \ix{software cache coherency} transparently.
+As discussed in \cref{s:trends:memory}, \ix{hardware cache coherency} is one of the important issues that limit scalability to many cores, because of the complexity of hardware cache coherency protocols.
+On the other hand, software cache coherency is often discarded as a viable alternative, as it requires a strongly disciplined programming approach.
+As a consequence, shared data is predestined to be uncached in such a system.
+In this experiment, the annotations of \cref{s:memory:annotations} are applied to investigate the feasibility of software cache coherency.
+
+For three applications from the \SPLASH* benchmark set, namely \theapp*{radiosity}, \theapp*{raytrace}, and \theapp*{volrend}, two experiments are run:
+\begin{enumerate}
+\item A setup where all private data (the stack, heap, and data structures of the \ac{OS}) is cached, but all application data that is shared between processes, resides in uncached memory.
+	Therefore, no cache coherency protocol is required, and all cache flushes are nullified.
+\item A setup where all memory is cached.
+	Therefore, the protocol discussed above is applied on all shared data structures.
+\end{enumerate}
+
+\Vref{fig:memory:util_swcc} shows the performance results of both experiments, labeled `uncached' for the first experiment with uncached shared data, and `\acs{SWCC}' for the second.
+For all applications, it is indicated which percentage of the total execution time is used for the actual calculations, or the processor stalls.
+The stalls are categorized as:
+a stall on instruction cache miss;
+a stall on reading shared data (after a data cache miss or just an uncached read, depending on experiment);
+a stall because of a data cache miss when reading private data; and
+a stall on writing (hardly visible in the figure).
+For example, \theapp{radiosity} without cache coherency has an effective \ix{utilization} of \SI{38}{\percent}.
+Applying software cache coherency improves the total execution time by \SI{26}{\percent} and the core utilization increased to \SI{70}{\percent}.
+So, the execution time improved by \SI{22}{\percent} on average for these applications when using software cache coherency, compared to leaving shared data uncached.
+The time spent on executing flush instructions for software cache coherency is for the three applications \SI{0.66}{\percent}, \SI{0.00}{\percent}, and \SI{0.01}{\percent} of the total run time---the overhead is negligible.
+
+\begin{figure}%
+\inputfig{figures/mem_scc_util}%
+\caption{Measured execution time and processor utilization of uncached and software cache coherency}%
+\label{fig:memory:util_swcc}%
+\end{figure}
+
+The implemented cache protocol forces shared data out of the cache during the \ann{exit_x} and \ann{exit_ro} calls.
+So, executing two consecutive non-exclusive sections will read data from background memory twice, even though this is strictly not necessary.
+Worst case, data is flushed from the cache after every read.
+In \cref{fig:memory:util_swcc}, the stall time on reading data is separated in reading private and shared data, of which the latter is conservatively (\ie over-estimated) measured.
+The figure shows that for \theapp{raytrace} and \theapp{volrend}, there are hardly any stalls on reading shared data when applying software cache coherency.
+For \theapp{radiosity}, the stall time is reduced, although not as much as for the other applications.
+This is due to the design of the application, which addresses and updates the memory in a chaotic way.
+
+\subsubsection{Equivalent hardware cache coherency}
+
+Although the performance improved with software cache coherency, the overhead of this approach is important.
+A comparison of \ix[hardware cache coherency]{hardware} and software cache coherency schemes is done by \citet{adve:hwsw_cache_coherency}, which is based on compile-time analysis of memory operations using analytical models.
+In contrast, we have run-time measurements of the cache behavior, which allows a more realistic comparison.
+
+Since we do not have a 32-core hardware cache coherent \MicroBlaze system, we reason about the performance of such a system as follows.
+In the implemented protocol, shared data is flushed from the cache at an \ann{exit_x} and \ann{exit_ro} call.
+The platform can count the number of executed \lstinline{wdc.flush} \MicroBlaze cache-flush instructions, which precisely indicates the amount of flushed data.
+Two assumptions are made.
+First, the whole line that is flushed, contains valid data.
+So, multiplying the number of instructions by the cache line size gives an upper bound on the actual amount of data.
+Second, in a perfect hardware cache coherency implementation, all of this data is instantly communicated to all caches and is available to all cores.
+Hence, all read stalls on shared data are prevented, as data is always available in the cache.
+However, any realistic hardware implementation must be slower than this.
+
+Based on these assumptions, a bound can be calculated how fast hardware cache coherency could be.
+The first column of \vref{t:memory:hwcc} lists the utilization of the processors for all applications, which corresponds to the utilization of the `\acs{SWCC}' run of \cref{fig:memory:util_swcc}.
+This includes the time (see second column) required to execute the flush instructions, which is overhead of software cache coherency.
+For all applications, the time spent on flushing is very low, so the software overhead is very low.
+In the third column, the stall time on shared data is listed.
+
+\ctable[label={t:memory:hwcc},caption={Comparison measured software cache coherency overhead, and conservatively estimated maximum hardware cache coherency speedup}]{
+	l
+	S[table-format=2.2]
+	S[table-format=1.2]
+	S[table-format=2.2]
+	S[table-format=2.2]
+	}{
+	\tnote[a]{Measurement of the \acs{SWCC} runs of \vref{fig:memory:util_swcc}.}
+	\tnote[b]{Time the processor is executing instructions to flush the cache.}
+	\tnote[c]{Maximum time the processor stalls on reading shared data.}
+	\tnote[d]{Estimation, assuming that every cache read is a hit.}
+}{
+\FL					& \hdr[11ex]{Utiliza\-tion\tmark[a] (\si{\percent})}
+					& \hdr[13ex]{Flush in\-struc\-tions\tmark[ab] (\si{\percent})}
+					& \hdr[9ex]{Read stall\tmark[ac] (\si{\percent})}
+					& \hdr[13ex]{\acs{HWCC} speedup\tmark[d] (\si{\percent})} \ML
+\theapp*{radiosity}	& 69.69	& 0.66	& 11.75	& 12.41 \NN
+\theapp*{raytrace}	& 85.89	& 0.00	&  0.03	&  0.03 \NN
+\theapp*{volrend}	& 69.96	& 0.01	&  0.16	&  0.17 \LL
+}
+
+In case of hardware cache coherency, no time is required to flush the cache and no time is lost on stalling when reading data, because all data is assumed to be in the cache automatically.
+Hence, a hardware cache coherency implementation would benefit from the reduction of both.
+The sum of both numbers is the bound of the maximum improvement of having hardware instead of software cache coherency, which is also listed in the fourth column of the table.
+For example, \theapp{radiosity} uses \SI{0.66}{\percent} of the time is used for flushes and stalls \SI{11.75}{\percent} of the time on shared data.
+Therefore, the maximum reduction of the execution time is \SI{12.41}{\percent}.
+Because the other applications share less data, the maximum speedup when hardware cache coherency would be available, is next to nothing.
+%On average, perfect hardware cache coherency can make these applications 4.20\% faster.
+This shows that the maximum speedup by using hardware cache coherency is limited, but also very depending on (the design and implementation of) the application.
+
+%This experiment shows that it is feasible and beneficial to annotate the application and transparently apply software cache coherency.
+
+\subsection{Distributed shared memory: multi-reader/-writer \acsh{FIFO}}
+
+The second case study uses the setup where all local memories are used as a single software-managed distributed shared memory system, which are all connected via a write-only interconnect.
+Although the \SPLASH* applications above could be mapped onto this memory architecture, the local memories in our system are too small to put all data in them.
+Therefore, we discuss another application: a multiple-reader, multiple-writer \acix{FIFO}.
+Such a \ac{FIFO}, in combination with distributed memory, is useful in streaming applications~\cite{denolf:csdf,bijlsma:buffers}.
+%, for example, which are modeled by a \ac{SDF} graph, where all processes use \ac{FIFO} communication.
+
+\Vref{fig:memory:mfifo} shows an outline of the implementation of the \ac{FIFO}.
+For simplicity, only \lsticode|push()| and \lsticode|pop()| are given and checks for an \lstinline|int| overflow of the pointers \lstinline|write_ptr| and \lstinline|read_ptr| have been left out.
+The listing indicates which ordering rules apply to the statements in the source code.
+A nice property of this implementation is that the read and write pointers are only polled from local memory, which is fast and does not influence the execution of other processors.
+The \acix{DSM} back-end (see \vref{t:memory:implementation}, third column) makes sure that updates will arrive properly.
+
+\begingroup%
+	\newcommand{\ostart}[1]{\tikz[overlay,remember picture]{\node[inner sep=0,outer sep=0] (ordering start #1) at (0,.25ex) {};}}
+	\newcommand{\oend}[4]{\tikz[overlay,remember picture,depgraph]{
+		\draw[#3,looseness=3,#1] (ordering start #2) edge[bend left=90] node[label left,anchor=west]{#4} (0,.75ex);}}
+	\newcommand{\oendfence}[2][]{\oend{#1}{#2}{global}{\SYMorderfence}}
+	\newcommand{\oendlocal}[2][]{\oend{#1}{#2}{local}{\SYMorderlocal}}
+	\newcommand{\oendsync}[2][]{\oend{#1}{#2}{global}{\SYMordersync}}
+	\newcommand{\oendprog}[2][]{\oend{#1}{#2}{global}{\SYMorderprog}}
+	\newcommand{\oendimpl}[2][]{\oend{#1}{#2}{implicit}{}}
+\begin{lstcode}[float,caption={%
+	Outline of a multiple-reader, multiple-writer \acs{FIFO} in C++, with element type \lsticode|T|, a buffer depth of \lsticode|N|, and \lsticode|R| readers.
+	The essential orderings are indicated.},
+	label={fig:memory:mfifo},
+	variable={buf,write_ptr,read_ptr,data,wp,rp,i,me},
+	type={MFifo},
+	template={T,N,R},
+	lst={escapechar=@},
+]
+template <typename T,int N,int R> class MFifo {
+	T buf[N];
+	int write_ptr, read_ptr[R];
+public:
+	void push(T data){
+		int wp,rp;
+		@\scstart{1}@entry_x(write_ptr);          @\ostart{x}@
+		wp =    write_ptr % N;
+		// Wait until all readers got buf[wp]
+		for(int i=0;i<R;i++)
+			do{ 
+				@\scstart{}@entry_ro(read_ptr[i]);
+				rp =     read_ptr[i];@\ostart{}@
+				@\scend{}@exit_ro( read_ptr[i]);
+			}while(rp<wp-N);
+		fence();                     @\oendlocal[looseness=1]{}\ostart{}@
+		@\scstart{}@entry_x(buf[wp]);            @\oendfence{}\ostart{}@
+		        buf[wp] = data;
+		@\scend{}@exit_x( buf[wp]);            @\oendprog[looseness=1.5]{}\ostart{}@    @\ostart{buf}@
+		fence();                     @\oendfence{}\ostart{}@
+		        write_ptr++;
+		flush(  write_ptr);          @\ostart{wi}@
+		@\scend{1}@exit_x( write_ptr);          @\oendfence[looseness=1.5]{}@  @\oendsync[looseness=1,reverse]{x}@
+	}
+	T const pop(){
+		int wp,rp,me=get_reader_id();
+		@\scstart{}@entry_ro(read_ptr[me]);
+		rp =     read_ptr[me] % N;
+		@\scend{}@exit_ro( read_ptr[me]);
+		do{
+			// Wait until data is written
+			@\scstart{}@entry_ro(write_ptr);
+			wp =     write_ptr;      @\oendimpl[looseness=1]{wi}\ostart{}@
+			@\scend{}@exit_ro( write_ptr);
+		}while(wp<=rp);
+		fence();                     @\oendlocal[looseness=1]{}\ostart{}@
+		@\scstart{}@entry_x( buf[rp]);           @\oendfence{}\ostart{}@    @\oendsync[looseness=1]{buf}@
+		T data = buf[rp];
+		@\scend{}@exit_x(  buf[rp]);           @\oendprog[looseness=1.5]{}\ostart{}@
+		fence();                     @\oendfence{}\ostart{}@
+		@\scstart{}@entry_x( read_ptr[me]);      @\oendfence{}@  @\ostart{rx}@
+		         read_ptr[me]++;
+		flush(   read_ptr[me]);
+		@\scend{}@exit_x(  read_ptr[me]);      @\oendsync[looseness=1.5,reverse]{rx}@
+		return data;
+	}
+};
+\end{lstcode}
+\endgroup
+
+Although this example is given in the context of distributed memory, the \ac{FIFO} behaves also correctly on all of the other architectures.
+
+\subsection{Scratchpad memory: motion estimation}
+\label{s:memory:case_study:spm}
+
+The last case study shows how the \ac{PMC} approach can be used for a typical \acix{SPM} application: motion estimation.
+In video encoding, the motion of an object is used for compression.
+For this, a video frame is split in a matrix of blocks.
+Then, every block of the next frame is matched within a search window of a reference frame.
+A naive algorithm to find the motion vector is to do a full search.
+In such an approach, it is efficient to store both the block and the search window locally, because they are read many times.
+In that context, an \ac{SPM} can be beneficial.
+
+There is a practical issue when dealing with an \ac{SPM} when the processor does have an \ac{MMU}: an object has two addresses, one of the main memory and one of the \ac{SPM}.
+It is convenient when the annotations hide this.
+We implemented several C++ classes, as an example of how such complexities can be hidden and how dealing with the memory model is better integrated in the language.
+
+\Vref{fig:memory:motion} gives a partial C++ implementation of a motion estimation application and the annotations for \acp{SPM}.
+\begin{lstcode}[float,%
+	caption={More complex scoping support in C++, with an alternative approach to handle entry--exit pairs},%
+	label={fig:memory:motion},
+	variable={obj,spm,o,window,mblock,vector,work,queue,window_s,mblock_s,vector_s},
+	template={T},
+	type={ScopeRO,work_t,Vector,Window,MBlock,ScopeX},
+	lst={escapechar=@},
+]
+// implementation of annotations (see @\color{lst comment color}\itshape\vref{t:memory:implementation}@)
+template <typename T> class ScopeRO {
+	T const & obj;
+	T* spm;
+public:
+	ScopeRO(T const & o) : obj(o) {   // entry_ro
+		spm = (T*)alloc_spm(sizeof(T));
+		if(sizeof(T)>1) lock(obj);
+		memcpy(spm,&obj,sizeof(T));
+		if(sizeof(T)>1) unlock(obj);
+	}
+	~ScopeRO { free_spm(spm); }       // exit_ro
+	operator T const &() { return *spm; }
+};
+
+// application code
+typedef struct {
+	Window const * window;
+	MBlock const * mblock;
+	Vector* vector; } work_t;
+
+Vector motion_est(Window const &,MBlock const &);
+
+void worker(){
+	work_t work;
+	while((work=queue.pop())){
+		@\scstart{2}@ScopeRO<Window> window_s(*work.window);
+		@\scstart{1}@ScopeRO<MBlock> mblock_s(*work.mblock);
+		@\scstart{0}@ScopeX<Vector>  vector_s(*work.vector);
+		vector_s = motion_est(window_s,mblock_s);@\label{l:cast}@
+		@\scend{0}\scend{1}\scend{2}@// all scope objects destructed
+	}
+}
+\end{lstcode}%
+Assume that the \lsticode|worker()| function is executed by one thread, which gets work packets via a queue.
+Then, it accesses the search window and block, and executes the matching function to determine the motion vector.
+The \ann{entry_ro}--\ann{exit_ro} calls are handled by the \lstinline|ScopeRO| class, where the entry call is implemented by the constructor and exit by the destructor.
+The implementation corresponds to the fourth column of \cref{t:memory:implementation}.
+For the entry--exit pair with write access, there is a similar class, but this is not shown in the listing.
+When the \lsticode|ScopeRO<Window>| object is cast to a \lsticode|Window const&| as a function parameter on \cref{l:cast} in order to access the actual data, for example, a reference is returned to the \ac{SPM} and the original data is left untouched.
+Although the concept of the annotations stays the same, this shows that it depends on the language how they can be used effectively.
+
+Like the previous examples, the application is now independent of the underlying memory model.
+Although it depends on many architectural parameters, experiments show a significant performance increase when this application is using \acp{SPM}, compared to the software cache coherency setup.
+
+
+\section{Conclusion}
+\label{s:memory:conclusion}
+
+Porting applications to a platform with a different programming model requires intrusive modifications to that application.
+A change in the memory model is a commonly encountered issue.
+This chapter presents \acix{PMC}, an approach that makes applications independent of the memory model of the hardware, in order to allow transparent mapping to different platforms.
+This effectively removes the hardware's memory model from the programming model.
+
+\Ac{PMC} consists of a weak synchronized memory model that defines the fundamental orderings an application can assume, and annotations that allow defining additional ordering constraints.
+The memory model
+1) is an intersection of all orderings of all common memory models to allow maximum ordering flexibility; but
+2) is still strong enough to behave like \aclixmc{PC}, and can therefore simulate \acixmc{SC} for data-race-free applications~\cite{gharachorloo:release_consistency};
+3) is weaker than \aclixmc{EC}, because of relaxed constraints on the ordering of synchronization operations; and
+4) clearly distinguished the four different types of orderings, which allows straightforward usage.
+The annotations in the application give the tooling all information about the additional ordering requirements, such that it can automatically insert logic to complement the hardware orderings when necessary.
+
+The overview figure \chapfigpageref suggests that the memory model is removed from the \ix{programming model}.
+That is not entirely true for C; the programmer still has to annotate the source code.
+However, these annotations are related to the algorithm that is implemented, and are not related to the actual hardware.
+In that sense, specifying annotations is required by the abstract machine within the programming model.
+The case study in \cref{s:memory:case_study:spm} shows that using C++, the annotations can be embedded in the language quite well, such that \ac{PMC} is completely hidden.
+To prevent even deliberately casting pointers to circumvent these scope classes, a programming language is required that natively uses \ac{PMC} and automatically wraps all accesses in proper entry--exit pairs.
+
+The case studies show the interplay of hardware and software, which are combined in three different ways to realize the same memory model with different \ix[trade-off]{trade-offs}:
+hardware \vs software control over cache coherency, core-to-core \vs via main memory communication, repeatedly reading main memory \vs overhead of duplication and reading local.
+The software cache coherency case is especially interesting, as a common approach to programming a multiprocessor system is to use C, shared memory, and caches.
+The evaluation shows that, depending on the application, using hardware cache coherency might only give a comparable performance to using software cache coherency, but requires complex hardware control.
+Therefore, \ix[memory (consistency) model!abstraction]{abstracting} from the memory model, as \ac{PMC} does, gives great freedom in the implementation of the platform, and the stable interface to the applications allows them to be portable between platforms.
+

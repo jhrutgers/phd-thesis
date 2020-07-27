@@ -1,0 +1,135 @@
+% vim:spelllang=nl:spell
+\documentclass[final,oneside,10pt]{memoir}
+
+\pdfminorversion=3% or 4 or 6...
+\pdfcompresslevel=9% which is really slooow
+
+\def\golden{1.61803399}
+\newdimen\marwd
+\marwd=2.5cm
+
+\setstocksize{229mm}{162mm} % C5
+\settrimmedsize{\stockheight}{\stockwidth}{*} % C5
+\setheadfoot{0pt}{0pt}
+\setulmarginsandblock{1cm}{*}{\golden}
+\setlrmarginsandblock{\marwd}{\marwd}{*}
+\trimNone
+\showtrimsoff
+\checkandfixthelayout
+
+\usepackage[file={src/info},pdftitleprefix={Stellingen behorende bij het proefschrift}]{thesisinfo}
+\PassOptionsToPackage{pdfdisplaydoctitle=true}{hyperref}
+
+\usepackage[x]{mypdfx}
+\usepackage{etex,etoolbox}
+\usepackage[dutch]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{datetime,enumitem,xcolor,MinionPro,tikz}
+\usepackage[protrusion=true,expansion=true,stretch=10,shrink=10,babel]{microtype}
+\usepackage{ragged2e}
+\usepackage{hyperref}
+
+\usepackage[acronym,smallcaps,nonumberlist,hyperfirst=false,shortcuts]{glossaries}
+\usepackage{wordfonts,ifempty}
+\input{src/acronyms}
+
+\usetikzlibrary{calc}
+
+\figureversion{text,proportional}
+\pagestyle{empty}
+\setlength\parindent{0pt}
+\renewcommand{\baselinestretch}{1.1}
+\def\fillratio#1{\null\vskip 0pt plus #1fill\null}
+
+\newdimen\dashspacing
+\dashspacing=1ex
+%\def\refer#1{\mbox{}\hspace{3em}\mbox{}\hfill\mbox{}\hfill\mbox{}\hfill\mbox{\color{gray}\itshape(#1)}\hfilneg}
+\newsavebox{\referbox}
+\def\refer#1{%
+	\savebox{\referbox}{\color{gray}\itshape(#1)}%
+	\tikz[baseline=0,overlay,remember picture]{\path let \p1=(0,0), \p2=(current page.east), \n1={\x2-\x1-\marwd} in \pgfextra{\xdef\remlinewidth{\n1}};}%
+	\mbox{}\ifdimless{\remlinewidth}{2em+\wd\referbox}{\hfill\mbox{}\linebreak\mbox{}}{}%
+	\hfill\usebox{\referbox}%
+}
+\def\nohyphenation{\hyphenpenalty=10000\exhyphenpenalty=10000}
+
+\begin{document}
+\fillratio1%
+{%
+	\Centering%
+	\textsc{\LARGE Stellingen}\\[1ex]%
+	behorende bij het proefschrift\\[2ex]%
+	\parbox[t]{\linewidth}{\Centering\nohyphenation\color{black!80}%\scshape%
+		\begin{Spacing}{1.2}%
+			\LARGE\thesistitle%
+			\ifempty{\thesissubtitle}\else\\\Large\itshape\thesissubtitle\fi%
+		\end{Spacing}%
+	}\\[2ex]%
+	door \theauthor,\\%
+	te verdedigen op \displaydate{thesis}\\%
+	\vspace{4ex plus 2ex}
+}
+
+% <= 10 STELLINGEN
+\begin{enumerate}[topsep=0mm,
+	leftmargin=0pt,itemindent=0pt,labelindent=-\dashspacing,labelwidth=*,labelsep*=\dashspacing,
+	label=\textsc{\color{black!50}\figureversion{text,tab}\arabic*\hskip\dashspacing---},
+	ref=\textsc{\arabic*}]
+% <= 4 ONDERWERP-GERELATEERDE STELLINGEN
+\item De effici\"entie van hardware kan alleen bepaald worden, wanneer er een softwarekader is gespecificeerd dat beschrijft hoe die hardware goed kan worden gebruikt.
+	\refer{Hoofdstuk~4}
+\item Een zwakker geheugenmodel vereenvoudigt de realisatie van cache coherency, maar hoeft het schrijven van een applicatie niet te compliceren.
+	\refer{Hoofdstuk~5 en~6}
+\item Het is essentieel om alle platformabstracties gezamenlijk te beschouwen en aan te passen, teneinde vanuit een programmeerperspectief om te kunnen gaan met de huidige trends in many-core\-architecturen.
+	\refer{Dit proefschrift}
+
+% >= 4 WETENSCHAPPELIJKE STELLINGEN
+\item De kwaliteiten van een goede programmeertaal zijn sterker gerelateerd aan de intu\"itie van de mens dan aan de architectuur van de computer.
+%\item Concurrency kan nooit de uitvinding zijn geweest van een programmeur; het maakt zijn taak uitsluitend ingewikkelder.
+\item Hoewel de laatste C-standaard duidelijkheid verschaft omtrent concurrency, rijst er juist onduidelijkheid bij programmeurs of ze wel C schrijven; men kan vrijwel onmogelijk vaststellen of een C-achtig programma voldoet aan de eisen die de standaard voorschrijft om als `C' aangemerkt te mogen worden.
+	% een C-programma moet (onder andere) data-race free zijn, maar deze eigenschap is niet (automatisch) te bepalen
+\item Bugs zijn vaak het resultaat van de onmacht van de mens om de overweldigende complexiteit van een systeem te kunnen overzien.
+	Desalniettemin betekent vooruitgang in computersystemen het toevoegen van nog meer complexiteit.
+\item C is een populaire programmeertaal, omdat het nauwelijks een programmeerstijl afdwingt, het in principe de programmeur de mogelijkheid geeft om de maximale performance te bereiken, en het de illusie wekt dat programma's portable zijn.
+%	(denk aan concurrency in C doorschuiven naar de programmeur, programmeerissues in de hardware naar software, bezuiniging van de overheid naar gemeenten?)
+
+% <= 2 Algemene stellingen
+\item Sociale media danken hun kwalificatie aan de geboden mogelijkheid tot interactie tussen mensen.
+	Dit zijn echter zelden mensen in de directe omgeving, hoewel dat juist degenen zijn met wie sociale interactie gewenst is.
+\end{enumerate}
+\fillratio{\golden}
+\end{document}
+
+%\item Verzuim van het gebruik van verificatiesoftware zoals Valgrind is als een vliegtuigbouwer die na assemblage niet controleert of alle schroeven voldoende zijn aangedraaid.
+%\item De wind kan niet in je zeilen blazen als je geen richting hebt gekozen.
+%	\refer{Deepak Chopra}
+%	% is dat deze? http://www.linkedin.com/profile/view?id=75054000&authType=name&authToken=phNp&trk=mp-ph-pn
+%\item Een probleem oplossen door het expliciet door te schuiven naar anderen leidt zelden tot een verbetering van de algehele situatie.
+%\item Hardware cache coherency is geen enkel probleem, als je maar aanneemt dat het coherencyprotocol geen ordening hoeft af te dwingen. (context: article ``Why on-chip cache coherency is here to stay'', hwcc lijkt schaalbaar, maar ze doen geen enkele uitspraak over het geheugenmodel. Echter, commerci\"ele architecturen (zie H2) krijgen het niet voor elkaar om en hwcc en een sterk model te bouwen.) % Wie heeft nu gelijk?
+%\item Meer kennis zorgt voor minder overhead (overhead is een resultaat van conservatieve aannames door abstracties, waardoor er geen optimale oplossing meer kan worden gevonden)
+%\item De software calls van software cache coherency is geen overhead; de machine kan niet zonder deze calls, dus zijn het noodzakelijke operaties.
+%\item Automatisering verplaatst doe-werk van ondersteunend personeel naar controle-werk van personeel dat juist ondersteund moet worden.
+%	Dat is dus een verlies-verlies situatie. (Denk aan TAS en het boeken van vluchten via ATP).
+%\item Wijsheid verwerf je niet door veel te weten, maar door niet te weten. (je moet vragen stellen in plaats van een pasklare mening hebben) \refer{Raimon Pannikar}
+%
+%% reserve
+%\item Programmable many-core = parallel hardware + simple software model $\rightarrow$ \\
+%	  Programmable many-core = parallel software + simple hardware model
+%%\item Onderzoek doen is op de zaken vooruit lopen (context: meeste onderzoekers claimen van alles dat ze (nog) niet waar kunnen maken, gepresenteerde resultaten zijn grotendeels opgeblazen) \refer{Marco}
+%\item Experimenten binnen informatica zijn niet transparant, het is gebaseerd op closed source tooling, vage aannames, binnen een zelfgekozen applicatiedomein. Meetresultaten zijn daardoor niet te verifieren en generaliseren. Wat is de waarde van dergelijk onderzoek?
+%\item Mensen kunnen niet programmeren; mensen maken voortdurend onbewuste, subtiele aannames, welke niet zijn terug te vinden in broncode en onmogelijk automatische verificatie toestaan.
+%\item Sociale media (op internet) hebben een dusdanig lage drempel voor mensen om hun mening te geven, waardoor `anti-social media' een betere naam zou zijn.
+%\item Een bom vernietigt alles, behalve agressie bij de ontvanger.
+%	Toch wordt dit middel ingezet op het wereldtoneel in een poging een uit de hand gelopen situatie te kalmeren.
+%	(de verwachte reactie van de VS op Syri\"e)
+%\item Hoe meer het kritisch verstand gaat overheersen, des te armer wordt het leven. \refer{G.\,C.\@ Jung}
+%\item Iets niet weten is ook een vorm van weten, als je het niet-weten bewust kunt aanvaarden. \refer{John Kabat-Zinn}
+%
+% vragen
+%\item What is `smart' about a smart phone when it lacks the fundamental property of intelligence: understanding of the environment?
+%	It never knows what I want, I always have to tell it what to do next...
+%\item The universe is inherently parallel and laws of nature are applied everywhere, without computational effort, and error margin.
+%	Why is it that hard for a computer in the same universe to do an universe-compatible N-body simulation?
+%\item What is the point of reasoning about performance of a program, if that program still contains bugs?
+%	Is a C program really efficient, if nobody knows whether it is bug-free?

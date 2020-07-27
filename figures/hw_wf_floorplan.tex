@@ -1,0 +1,80 @@
+\tikzset{
+	tile/.style={draw,inner sep=0,outer sep=0,alias=last tile,wrap text,fill=none,contour color=white},
+	ring/.style={connection,black!80,rounded corners=.5\portablefigunit,-,densely dotted},
+	tree step/.style={draw,line width=.25\portablefigunit,black!30},
+}%
+\def\drawtilerow[#1] (#2,#3);{
+	\path \contournode[tile,#1,name=t#2] {#2};
+		\foreach \t in {#3} 
+			\path (last tile.east) \contournode[tile,anchor=west,name=t\t,anchor=west] {\t};
+}%
+\def\drawring (#1);{
+	\draw[ring]
+		(t0.center) \foreach \t in {1,...,#1} { -- (t\t.center) } -- cycle;
+}%
+\def\drawtree (#1) <#2-#3> +#4;{
+	\draw[tree step]
+		let \n1={0}, \n2={0},
+			\p1=($(#2)+(\n1,\n2)$), \p2=($(#3)+(\n1,\n2)$) in
+		(\p1) to [bend left=#4] coordinate[midway] (#1) (\p2);
+}%
+\def\drawHtree (#1) <#2> +#3;{
+	\path
+		let \n1={int(#2)}, \n2={int(\n1+1)}, \n3={int(\n2+1)}, \n4={int(\n3+1)} in
+		(t\n1.center) coordinate (#1 t1)
+		(t\n2.center) coordinate (#1 t2)
+		(t\n3.center) coordinate (#1 t3)
+		(t\n4.center) coordinate (#1 t4);
+	\drawtree (#1a) <#1 t1-#1 t2> +#3;
+	\drawtree (#1b) <#1 t3-#1 t4> +#3;
+	\drawtree (#1) <#1a-#1b> +0;
+}%
+\def\drawHHtree (#1) <#2> +#3;{
+	\drawHtree (#1 h1) <#2> +0;
+	\drawHtree (#1 h2) <#2+4> +0;
+	\drawHtree (#1 h3) <#2+8> +0;
+	\drawHtree (#1 h4) <#2+12> +0;
+	\drawtree (#1a) <#1 h1-#1 h2> +#3;
+	\drawtree (#1b) <#1 h3-#1 h4> +#3;
+	\drawtree (#1) <#1a-#1b> +0;
+}%
+\subbottom[16~cores]{\label{fig:hardware:warpfield_floorplan:16}%
+	\begin{tikzpicture}[
+		tile/.append style={minimum size=1.5\portablefigunit},
+	]
+		% tiles
+		\drawtilerow[]								(5,4,3,2);
+		\drawtilerow[anchor=north,at=(t5.south)]	(6,7,0,1);
+		\drawtilerow[anchor=north,at=(t6.south)]	(9,8,15,14);
+		\drawtilerow[anchor=north,at=(t9.south)]	(10,11,12,13);
+		\begin{pgfonlayer}{background}
+			% tree
+			\drawHHtree (hh1) <0> +0;
+			% ring
+			\drawring (15);
+		\end{pgfonlayer}
+	\end{tikzpicture}%
+}\hfil%
+\subbottom[32~cores]{\label{fig:hardware:warpfield_floorplan:32}%
+	\begin{tikzpicture}[
+		tile/.append style={minimum height=1.0607\portablefigunit,minimum width=2.1213\portablefigunit},
+	]
+		% tiles
+		\drawtilerow[]								(9,8,7,6);
+		\drawtilerow[anchor=north,at=(t9.south)]	(10,11,4,5);
+		\drawtilerow[anchor=north,at=(t10.south)]	(13,12,3,2);
+		\drawtilerow[anchor=north,at=(t13.south)]	(14,15,0,1);
+		\drawtilerow[anchor=north,at=(t14.south)]	(17,16,31,30);
+		\drawtilerow[anchor=north,at=(t17.south)]	(18,19,28,29);
+		\drawtilerow[anchor=north,at=(t18.south)]	(21,20,27,26);
+		\drawtilerow[anchor=north,at=(t21.south)]	(22,23,24,25);
+		\begin{pgfonlayer}{background}
+			% tree
+			\drawHHtree (hh1) <0> +60;
+			\drawHHtree (hh2) <16> +60;
+			\drawtree (hh) <hh1-hh2> +0;
+			% ring
+			\drawring (31);
+		\end{pgfonlayer}
+	\end{tikzpicture}%
+}%

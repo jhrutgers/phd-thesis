@@ -1,0 +1,41 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{mylegend}
+
+\RequirePackage{tikz}
+
+\newcounter{mylegendentries}
+
+\def\mylegenddefs{%
+\def\mylegendentries{}%
+\def\mylegendentrynodes{}%
+\setcounter{mylegendentries}{0}%
+\providecommand{\mylegendentry}[3]{
+	node[rectangle,anchor=south west,minimum height=1ex,minimum width=2ex,inner sep=0pt,outer sep=0,##2] {}
+	node[anchor=base west,inner sep=0pt,outer ysep=0,outer xsep=2.75ex,##1] {\strut##3}
+}%
+\providecommand{\addmylegendentry}[2]{
+	\expandafter\edef\expandafter\mylegendentries\expandafter{\mylegendentries entry\arabic{mylegendentries}/##1/##2,}
+	\expandafter\edef\expandafter\mylegendentrynodes\expandafter{\mylegendentrynodes (entry\arabic{mylegendentries})}
+	\addtocounter{mylegendentries}{1}
+}%
+\def\mylegend[##1];{
+	\node[draw,fill=white,##1] {%
+		\let\themylegendentries\mylegendentries%
+		\let\themylegendentrynodes\mylegendentrynodes%
+		\begin{tikzpicture}
+			\path
+				\foreach \lname/\lstyle/\ldesc in \themylegendentries
+					{\ifx\lname\empty\else ++(0,-\baselineskip) \mylegendentry{name=\lname}{\lstyle}{\ldesc}\fi};
+		\end{tikzpicture}%
+	};
+}%
+}
+
+\makeatletter
+\let\oldendtikzpicture\endtikzpicture
+\def\endtikzpicture{\endgroup\oldendtikzpicture}
+\let\oldtikzpicture\tikzpicture
+\def\tikzpicture{\@ifnextchar[\tikzpicture@i \tikzpicture@ii}
+\def\tikzpicture@i[#1]{\oldtikzpicture[#1]\begingroup\mylegenddefs}
+\def\tikzpicture@ii{\oldtikzpicture\begingroup\mylegenddefs}
+\makeatother

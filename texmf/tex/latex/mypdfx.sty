@@ -1,0 +1,45 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{mypdfx}
+
+% set the option `x' to enable pdf x-1a mode
+\newif\ifusepdfx\usepdfxfalse
+\DeclareOption{x}{\usepdfxtrue}
+\ProcessOptions
+
+\ifusepdfx
+\edef\oldpdfpageattr{\the\pdfpageattr}
+\RequirePackage[x-1a]{pdfx}
+\RequirePackage{everyshi,etoolbox}
+\expandafter\global\expandafter\pdfpageattr\expandafter{\oldpdfpageattr}
+% postpone \EveryShipout after package flippage did his job
+\AfterPreamble{\EveryShipout{\pdfsetpageboxes}}
+\PassOptionsToPackage{
+	draft,
+	bookmarks=false,
+	}{hyperref}
+\fi% usepdfx
+
+% pdfTeX calculates the MediaBox, but somehow it is slightly smaller than what is calculated using the macro below, compensate the effect
+%\newcommand{\converttopdfunit}[1]{\strip@pt\dimexpr (#1)*65536/\number\dimexpr 1bp\relax}
+ \newcommand{\converttopdfunit}[1]{\strip@pt\dimexpr (#1)*65536/\number\dimexpr 1.00001bp\relax}
+
+% \pdfsetpagebox{TrimBox}{left margin}{top margin}{box width}{box height}
+\newcommand{\pdfsetpagebox}[5]{
+	\def\attrblm{\converttopdfunit{#2}\relax}
+	\def\attrbtm{\converttopdfunit{#3}\relax}
+	\def\attrbw{\converttopdfunit{#4+#2}\relax}
+	\def\attrbh{\converttopdfunit{#5+#3}\relax}
+	\edef\attr{
+		\the\pdfpageattr
+		/#1 [\attrblm\space \attrbtm\space \attrbw\space \attrbh]
+		}
+	\expandafter\pdfpageattr\expandafter{\attr}
+}
+
+% default: no trim
+\newcommand{\pdfsetpageboxes}{
+%	\pdfsetpagebox{MediaBox}{0pt}{0pt}{\the\paperwidth}{\the\paperheight}% set by pdfTeX
+	\pdfsetpagebox{BleedBox}{0pt}{0pt}{\the\paperwidth}{\the\paperheight}
+	\pdfsetpagebox{TrimBox}{0pt}{0pt}{\the\paperwidth}{\the\paperheight}
+}
+

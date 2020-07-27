@@ -1,0 +1,54 @@
+% vim:spelllang=nl
+\chapter*{Samenvatting}
+\pdfbookmark{Samenvatting}{samenvatting}
+
+Het is onwaarschijnlijk dat de komende tijd de rekenkracht van een single-core\-processor veel zal verbeteren.
+De kloksnelheid is beperkt door natuurkundige limieten en recente verbeteringen aan het ontwerp geven niet een snelheidswinst zoals die van enkele jaren geleden gaven.
+Toch nemen het aantal transistors per chip en de dichtheid nog steeds toe, omdat de gebruikte materialen en de productietechnieken blijven verbeteren.
+De combinatie van de beperkte rekenkracht van een enkele core en een overvloed aan transistors zal logischerwijs leiden tot \emph{many-core}-processoren.
+
+Een many-core\-processor bevat minstens tientallen cores en meestal gedistribueerd geheugen, die zijn verbonden (maar fysiek gescheiden) door een netwerk waarin communicatie meerdere klokcycli in beslag neemt.
+Ten opzichte van een multicoreprocessor, waarin slechts enkele met elkaar verweven cores zitten en \'e\'en bus en geheugen delen, worden een aantal complexe problemen zichtbaar.
+Het hebben van veel cores vraagt om veel parallelle taken om alle cores te benutten. Daarbij is communicatie gedistribueerd en decentraal geregeld.
+Om een dergelijke processor te kunnen programmeren moet de applicatie daarom ontworpen zijn voor parallellisme.
+Daarnaast moet deze applicatie kunnen omgaan met toestandsveranderingen van geheugen, waarbij de toestandsovergang non-deterministisch is, in tegenstelling tot sequenti\"ele applicaties waarvoor toestandsveranderingen atomair lijken.
+De complexiteit als gevolg van deze problemen maakt het programmeren van een many-core\-systeem met single-core\-programmeertechnieken zeer moeilijk.
+
+%
+Het centrale concept van dit proefschrift is dat abstracties die gerelateerd zijn aan (parallel) programmeren, zijn gestructureerd in \'e\'en platformmodel.
+Een platform is een gelaagde weergave van de hardware, het geheugenmodel, concurrencymodel, berekeningsmodel en de software voor compilatie en executie.
+Het \emph{programmeermodel} is een specifiek perspectief op dit platform voor de programmeur.
+
+Dit perspectief kan bepaalde details voor de programmeur verbergen of benadrukken.
+Een besturingssysteem biedt bijvoorbeeld een oneindig aantal virtuele processoren aan een applicatie---hoe de rekentijd van een processor wordt verdeeld over de processen wordt verborgen voor de programmeur.
+Echter, een programmeur wordt wel geacht exact aan te geven hoe rekenwerk moet worden opgesplitst en verdeeld over verschillende processen.
+Het programmeermodel geeft aan in hoeverre een programmeur kan vertrouwen op correcte aansturing van platformspecifieke details.
+Dit proefschrift beschrijft aanpassingen aan de verschillende abstractielagen, die het systeem als geheel effici\"enter maken en de complexiteit reduceren waar de programmeur via het programmeermodel aan wordt blootgesteld.
+
+Voor evaluatie van parallelle hardware en bijbehorende programmeertechnieken is er een 32-core \MicroBlaze-systeem voor \ac{FPGA} ontwikkeld, genaamd \Starburst.
+Het bevat een netwerk dat is toegespitst op gangbare communicatiepatronen van many-core\-applicaties.
+De cores delen een geheugen. Echter, cores kunnen dit geheugen omzeilen door berichten uit te wisselen via kleine, lokale geheugens als bandbreedte naar het gedeelde geheugen een knelpunt wordt.
+Op basis van deze berichten tussen cores, is een gedistribueerd mutex-algoritme ontworpen.
+De hardwarekosten van het netwerk schalen lineair mee met het aantal cores. De totale rekenkracht van het systeem schaalt bijna lineair (totdat de geheugenbandbreedte verzadigd raakt).
+
+Verschillende many-core\-architecturen ondersteunen verschillende geheugenmodellen.
+Deze hebben als overeenkomst dat atomaire toestandsveranderingen vermeden worden om de hardware eenvoudiger te maken.
+Het resulterende (zwakke) geheugenmodel vereist doorgaans niet dat caches coherent zijn, noch dat alle processen schrijfoperaties naar geheugen in dezelfde volgorde zien.
+Daarnaast vraagt het omschrijven van applicaties voor hardware met een ander geheugenmodel om ingrijpende aanpassingen. Dit is foutgevoelig werk.
+In dit proefschrift wordt een geheugenmodelabstractie gedefinieerd. Deze verbergt het geheugenmodel van de hardware voor de programmeur en versimpelt de hardware-implementatie, doordat de eisen aan de atomiciteit van toestandsveranderingen zijn versoepeld. Toch kan de abstractie effici\"ent worden ge\"implementeerd op verschillende geheugenarchitecturen.
+Experimenten met \Starburst laten zien dat software cache coherency automatisch kan worden toegepast op applicaties die deze abstractie gebruiken.
+
+Doorgaans wordt het threadingmodel gebruikt om parallellisme van de hardware te benutten.
+Echter, dit model is gebaseerd op een sequentieel berekeningsmodel, namelijk een registermachine, die concurrency niet eenvoudig toelaat.
+Een ander berekeningsmodel is nodig om concurrency voor de programmeur te verbergen.
+Dit proefschrift laat zien dat een op \lcalc gebaseerd programmeermodel het onderliggende concurrency- en geheugenmodel wel kan verbergen.
+Tevens kan de implementatie voor \Starburst omgaan met trage netwerkcommunicatie, software cache coherency en niet-atomaire toestandsveranderingen.
+Deze aanpak past daarom goed bij de trends in schaalbare many-core\-architecturen.
+
+Aanpassingen in de abstractielagen en bovengenoemde modellen hebben invloed op andere abstracties in het platform, maar voornamelijk op het programmeermodel.
+Om het systeem als geheel en de programmeerbaarheid te verbeteren moeten verbeteringen in de ene abstractielaag passen bij de eigenschappen van andere lagen.
+Daarom wordt in dit proefschrift \emph{\codesign} toegepast op alle modellen.
+\Codesign van het geheugenmodel, concurrencymodel en berekeningsmodel is bijvoorbeeld noodzakelijk voor een schaalbare implementatie van \lcalc.
+Daarnaast leidt alleen de combinatie van eisen van many-core\-hardware van de ene kant en het concurrencymodel van de andere kant tot de genoemde geheugenmodelabstractie.
+Dit proefschrift laat dus zien dat het essentieel en haalbaar is om alle abstracties gezamenlijk te beschouwen en aan te passen, om vanuit een programmeerperspectief om te kunnen gaan met de huidige trends in many-core\-architecturen.
+

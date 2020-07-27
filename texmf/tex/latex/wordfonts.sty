@@ -1,0 +1,320 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{wordfonts}
+
+\RequirePackage{etex,xargs}
+\RequirePackage{etoolbox}
+\RequirePackage{xspace}
+\RequirePackage{scalefnt}
+\RequirePackage{plainstring}
+
+% Makes sure that `post--World War \Rmnum{2}' will stay closely together, regardless of the stretching of the rest of the line.
+% see http://tex.stackexchange.com/questions/99542/fixed-width-interword-space
+\protected\def\fixedspaceword#1{%
+	\begingroup%
+	\spaceskip=1\fontdimen2\font plus 1pt minus \fontdimen4\font%
+	\xspaceskip=0pt\relax % just to be sure
+	#1%
+	\endgroup%
+}
+
+% \onlytextfont{\fontcmd}{txt}
+% will do \fontcmd{txt}, but wraps this in \text{}, when in math mode
+\newcommand{\onlytextfont}[2]{\ifmath{\text{#1{#2}}}{#1{#2}}}
+
+% Create simple single/few-word font wrappers.
+% Usage: \newwordfont[index group]{fontname}{\fontcommandwithoneargument}
+% Defines:
+%   \fontnamefont{asdf} to set asdf with \fontcommandwithoneargument
+%   \thefontname{asdf}  to set asdf with the proper font, protected for PDF text output and proper spacing
+%   \thefontname*{asdf} similar to \thefontname{asdf}, but adds asdf to the index (do not use in section headings)
+% If the optional argument is set, the value is used to group asdf in the index.
+\newcommand{\newwordfont}[3][]{
+	% actual font commands
+	\expandafter\def\csname #2font@\endcsname##1{\fixedspaceword{#3{##1}}}
+	\ifcsdef{#2font}{}{\expandafter\def\csname #2font\endcsname##1{\csname #2font@\endcsname{##1}}}
+	% without and with index wrappers
+	\expandafter\def\csname the#2@\endcsname##1{\texorplainstring{{\onlytextfont{\csname #2font@\endcsname}{##1}}}{##1}\xspace}
+	\expandafter\def\csname the#2@ix@\endcsname##1##2{%
+		\ifdef{\index}{%
+			\index{##1@\csname #2font@\endcsname{##1}}%
+			\ifx\relax#1\relax\else\index{#1!##1@\csname #2font@\endcsname{##1}}\fi%
+		}{}%
+		\csname the#2@\endcsname{##2}}
+	\expandafter\def\csname the#2@ix\endcsname##1{\csname the#2@ix@\endcsname{##1}{##1}}
+	% actual command
+	\expandafter\protected\expandafter\def\csname ATthe#2\endcsname{\expandafter\expandafter\expandafter\@ifstar\expandafter\expandafter\csname the#2@ix\endcsname\csname the#2@\endcsname}
+	\expandafter\def\csname the#2\endcsname{\texorplainstring{\csname ATthe#2\endcsname}{\csname the#2@\endcsname}}
+	% uppercase first letter
+	\expandafter\def\csname The#2@\endcsname##1{\csname the#2@\endcsname{\MakeTextUppercase##1}}
+	\expandafter\def\csname The#2@ix\endcsname##1{\csname the#2@ix@\endcsname{##1}{\MakeTextUppercase##1}}
+	\expandafter\protected\expandafter\def\csname ATThe#2\endcsname{\expandafter\expandafter\expandafter\@ifstar\expandafter\expandafter\csname The#2@ix\endcsname\csname The#2@\endcsname}
+	\expandafter\def\csname The#2\endcsname{\texorplainstring{\csname ATThe#2\endcsname}{\csname the#2@\endcsname}}% uppercasing in PDF does not work
+}
+
+\ifdef{\acronymfont}{
+	% to be used in headers: fixes conversion to PDF string for PDF ToC
+	\newcommand*{\acsh}[1]{\glsentryshort{#1}}
+	\newcommand*{\aclh}[1]{\glsentrylong{#1}}
+	\newcommand*{\Acsh}[1]{\glsentryshort{#1}}
+	\newcommand*{\Aclh}[1]{\glsentrylong{#1}}
+	\newcommand*{\acsph}[1]{\glsentryshortpl{#1}}
+	\newcommand*{\aclph}[1]{\glsentrylongpl{#1}}
+	\newcommand*{\Acsph}[1]{\glsentryshortpl{#1}}
+	\newcommand*{\Aclph}[1]{\glsentrylongpl{#1}}
+}{
+	\PackageWarning{wordfonts}{Load package wordfonts after package glossaries!}{}
+	% emulating glossary commands
+	\newcommand*{\ac}[1]{\noac{#1}}
+	\newcommand*{\acs}[1]{\noac{#1}}
+	\newcommand*{\acl}[1]{\noac{#1}}
+	\newcommand*{\acf}[1]{\noac{#1}}
+	\newcommand*{\Ac}[1]{\noac{#1}}
+	\newcommand*{\Acs}[1]{\noac{#1}}
+	\newcommand*{\Acl}[1]{\noac{#1}}
+	\newcommand*{\Acf}[1]{\noac{#1}}
+	\newcommand*{\acp}[1]{\noacp{#1}}
+	\newcommand*{\acsp}[1]{\noacp{#1}}
+	\newcommand*{\aclp}[1]{\noacp{#1}}
+	\newcommand*{\acfp}[1]{\noacp{#1}}
+	\newcommand*{\Acp}[1]{\noacp{#1}}
+	\newcommand*{\Acsp}[1]{\noacp{#1}}
+	\newcommand*{\Aclp}[1]{\noacp{#1}}
+	\newcommand*{\Acfp}[1]{\noacp{#1}}
+	\newcommand*{\acsh}[1]{\texorplainstring{\acs{#1}}{#1}}
+	\newcommand*{\aclh}[1]{\texorplainstring{\acl{#1}}{#1}}
+	\newcommand*{\Acsh}[1]{\texorplainstring{\Acs{#1}}{#1}}
+	\newcommand*{\Aclh}[1]{\texorplainstring{\Acl{#1}}{#1}}
+	\newcommand*{\acsph}[1]{\texorplainstring{\acsp{#1}}{#1\acrpluralsuffix}}
+	\newcommand*{\aclph}[1]{\texorplainstring{\aclp{#1}}{#1\acrpluralsuffix}}
+	\newcommand*{\Acsph}[1]{\texorplainstring{\Acsp{#1}}{#1\acrpluralsuffix}}
+	\newcommand*{\Aclph}[1]{\texorplainstring{\Aclp{#1}}{#1\acrpluralsuffix}}
+	\newcommand*{\acronymfont}[1]{#1}
+	\newcommand{\acrpluralsuffix}{s}
+}
+
+\newcommand*{\acronymfontupper}[1]{\scalefont{.95}#1}
+\newcommand*{\acronymfontlower}[1]{#1}
+
+\protected\def\acFu#1{{\acronymfontupper{\MakeTextUppercase{#1}}}}	% force to uppercase
+\protected\def\acFl#1{{\acronymfontlower{\MakeTextLowercase{#1}}}}	% force to lowercase
+\protected\def\acFn#1{{\acronymfontlower{#1}}}						% no forced case change (i.e., for math), use lowercase font
+\protected\def\acFc#1{%												% choose between uppercase and lowercase (only for A-Z)
+	\edef\ischarup{\ifcase`#1\relax
+		  0\or  1\or  2\or  3\or  4\or  5\or  6\or  7\or  8\or  9\or
+		 10\or 11\or 12\or 13\or 14\or 15\or 16\or 17\or 18\or 19\or
+		 20\or 21\or 22\or 23\or 24\or 25\or 26\or 27\or 28\or 29\or
+		 30\or 31\or 32\or 33\or 34\or 35\or 36\or 37\or 38\or 39\or
+		 40\or 41\or 42\or 43\or 44\or 45\or 46\or 47\or 48\or 49\or
+		 50\or 51\or 52\or 53\or 54\or 55\or 56\or 57\or 58\or 59\or
+		 60\or 61\or 62\or 63\or 64\or  A\or  A\or  A\or  A\or  A\or
+		  A\or  A\or  A\or  A\or  A\or  A\or  A\or  A\or  A\or  A\or
+		  A\or  A\or  A\or  A\or  A\or  A\or  A\or  A\or  A\or  A\or
+		  A\or 91\or 92\or 93\or 94\or 95\or 96\or 97\or 98\or 99\or
+		100\or101\or102\or103\or104\or105\or106\or107\or108\or109\or
+		110\or111\or112\or113\or114\or115\or116\or117\or118\or119\or
+		120\or121\or122\or123\or124\or125\or126\or127\or128\or129\or
+		\fi}%
+	\expandafter\ifstrequal\expandafter{\ischarup}{A}{\acFu{#1}}{\acFl{#1}}%
+}
+
+% tokenize input, respecting the \acFu, \acFl, \acFn, and \acFc commands
+\protected\def\@acFnil{\relax}%
+\newcommand{\@acF}[2]{%
+	\ifdefparam{#1}{#1{#2}\@acF}{%
+		\ifdefequal{#1}{\@acFnil}{}{\acFc{#1}\@acF{#2}}}%
+}
+
+% fully expand input and pass it to tokenizer
+\newcommand{\acF}[1]{%
+	\edef\@acFtext{#1}%
+	\expandafter\@acF\@acFtext\@acFnil\@acFnil%
+}
+
+% using \acF will make the capitals in the short text a bit smaller, but prohibits using \Gls, \GLS and friends.
+\renewcommand*{\acronymfont}[1]{\texorplainstring{\acF{#1}}{#1}}
+\robustify{\acronymfont}
+\renewcommand*{\acrpluralsuffix}{\acFl{s}}
+\renewcommand{\Ac}[1]{\ac{#1}}
+\renewcommand{\Acp}[1]{\acp{#1}}
+\newcommand{\hyperbold}[1]{\textbf{\hyperpage{#1}}}
+\ifdef{\defglsentryfmt}{
+	% TeXLive >=2013
+	\AtBeginDocument{%
+		\defglsentryfmt[\acronymtype]{%
+			\ifdefempty{\glscustomtext}{%
+				\ifglsused{\glslabel}{%
+					\acronymfont{\glsgenentryfmt}%
+				}{%
+					\begingroup\glsgenentryfmt\endgroup%
+					\space \emph{(\ix[\glsentrysymbol{\glslabel}@%
+						\glsifplural{\acronymfont{\glsentrysymbolplural{\glslabel}}}%
+									{\acronymfont{\glsentrysymbol{\glslabel}}}|hyperbold]{%
+						\acronymfont{\glsifplural\glsentrysymbolplural\glsentrysymbol{\glslabel}}})}%
+				}%
+			}{%
+				\glsgenentryfmt%
+			}%
+		}%
+		\renewcommand*{\glstextformat}[1]{\fixedspaceword{#1}}%
+	}
+}{
+	% TeXLive <=2012
+	\ifdef{\defglsdisplayfirst}{
+		\AtBeginDocument{%
+			\defglsdisplayfirst[\acronymtype]{#1#4 \emph{(\ix[#3@\acronymfont{#3}|hyperbold]{\acronymfont{#3}})}}%
+			\renewcommand*{\glstextformat}[1]{\fixedspaceword{#1}}%
+		}
+	}{}
+}
+
+% like \ac{}, but without being in the glossaries, for once-only usage, without long description
+\newcommand{\noac}[1]{\acronymfont{#1}}
+\newcommand{\noacp}[1]{\acronymfont{#1\acrpluralsuffix}}
+\newcommand{\noacix}[1]{\ix[#1@\noac{#1}]{\noac{#1}}}
+
+% converts number to uppercase Roman in acronymfont, safe to use within acronyms
+\protected\def\Rmnum#1{{\acronymfontupper{\expandafter\@slowromancap\romannumeral#1@}}}
+
+% like \acs{}, but to be used in a section title, like \section{The \acsh{OS}}
+\protected\def\acsh@#1{\acronymfont{#1}}
+\def\acsh#1{\texorplainstring{\acsh@{#1}}{\glsentryshort{#1}}}
+\def\Acsh#1{\acsh{#1}}
+
+% Define a command that expands to a specifically formatted term.
+% Usage: \acrfixed{cmdname}{pdf text}{index entry}{normal text}
+% Use \cmdname to output the normal text, use \cmdname* to output the normal text and add it to the index
+% Don't use \cmdname* in captions!
+\newcommand{\acrfixed}[4]{%
+	\expandafter\def\csname #1@\endcsname{%
+		\ifstrempty{#2}{\texorplainstring{\fixedspaceword{#4}}{#4}}{\texorplainstring{\fixedspaceword{#4}}{#2}}%
+		\xspace}
+	\expandafter\def\csname #1@ix\endcsname{%
+		\ifstrempty{#2}{\texorplainstring{\fixedspaceword{#4}}{#4}}{\texorplainstring{\fixedspaceword{#4}}{#2}}%
+		\ifdef{\index}{\ifstrempty{#3}{\index{#4}}{\index{#3}}}{}%
+		\xspace}
+	\expandafter\protected\expandafter\def\csname #1ATAT\endcsname{\expandafter\expandafter\expandafter\@ifstar\expandafter\expandafter\csname #1@ix\endcsname\csname #1@\endcsname}
+	\expandafter\def\csname #1\endcsname{\texorplainstring{\csname #1ATAT\endcsname}{\csname #1@\endcsname}}
+}
+
+% properly handle a full stop and spaces around common abbrs.
+\def\gobbledotornot{\@ifnextchar.{}{.\@\xspace}}	% in PDF (i.e. \protect'ed in a section heading), this does not work properly
+\def\etc{etc\gobbledotornot}						% et cetera, "and so on"
+\def\vs{vs\gobbledotornot}							% versus, "against"
+\def\eg{e.g\gobbledotornot}							% exempli gratia, "for example" (usually followed by a comma)
+\def\ie{i.e\gobbledotornot}							% id est, "that is" (clarification)
+\def\cq{c.q\gobbledotornot}							% casu quo, "in that case" (somehow only used by Dutch authors, you might want to avoid using it)
+\def\viz{viz\gobbledotornot}						% videlicet, "namely"
+\def\etal{\fixedspaceword{et al}\gobbledotornot}	% et alii, "and others"
+
+% prevents hyphenation in the current group
+\def\nohyphenation{\hyphenpenalty=10000\exhyphenpenalty=10000}
+
+% \ifmath{when in math}{otherwise}
+\def\ifmath{%
+	\ifmmode\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi%
+}
+
+\def\gobblefirst#1#2{%
+	\ifx#1#2\else#2\fi%
+}
+
+% \newsym{name}{math-def}[plain string def]{description}[category]
+% Creates: \SYMname for normal usage, \SYMname* to add to index and use (do not use starred version for headings)
+% Plain string def is used in PDF strings and index sorting, if it is a true symbol, prepend it with at *, when empty (or not specified), math-def is used
+% math-def can contain #1, #2, and #3 for three optional arguments
+\newcommand*{\newsym@}[5]{
+	\ifcsdef{SYM#1}{\PackageError{wordfonts}{Symbol `#1' already defined.}{}}{}
+	% formatting format with all arguments
+	\csdef{SYM#1@fmt}##1##2##3{#2}
+	% primary command: collect optional arguments and select between math/normal mode
+	\expandafter\newcommandx\expandafter*\csname SYM#1@@\endcsname[3][1=,2=,3=]{%
+		\ifmath{\csname SYM#1@fmt\endcsname{##1}{##2}{##3}}{$\csname SYM#1@fmt\endcsname{##1}{##2}{##3}$\xspace}%
+	}
+	% add to index and continue to primary command
+	\csdef{SYM#1@@ix}{%
+		\edef\theindexsym{#3}%
+		\expandafter\index\expandafter{\theindexsym @\expandafter\protect\csname SYM#1\endcsname}%
+		\ifdef{\glsadd}{%
+			\ifglsused{SYM#1}{}{\glsunset{SYM#1}\glsadd{SYM#1}}%
+		}{}%
+		\csname SYM#1@@\endcsname%
+	}
+	% protected for section headers
+	\protected\csdef{SYM#1@}{%
+		\expandafter\expandafter\expandafter\@ifstar\expandafter\expandafter\csname SYM#1@@ix\endcsname\csname SYM#1@@\endcsname}
+	% entry command: choose between usage in PDF string (section header) and normal TeX
+	\csdef{SYM#1}{%
+		\texorplainstring{%
+			\ifmath{\csname SYM#1@@\endcsname}{\csname SYM#1@\endcsname}%
+		}{%
+			\gobblefirst*#3\relax\xspace%
+		}%
+	}
+	\ifdef{\newacronym}{
+		\edef\theacrsort{sort=*#3SYM#1}
+		\expandafter\newrobustcmd\expandafter*\expandafter{\csname SYM#1@acr\endcsname}{\csname SYM#1@fmt\endcsname{}{}{}}
+		\expandafter\newacronym\expandafter[\theacrsort,user1=#5]{SYM#1}{\acFn{\ensuremath{\csname SYM#1@acr\endcsname}}}{#4}
+	}{}
+}
+\newcommandx*{\newsym}[5][3=,5=]{%
+	\ifstrempty{#3}{\newsym@{#1}{#2}{\csname SYM#1@fmt\endcsname{}{}{}}{#4}{#5}}{\newsym@{#1}{#2}{#3}{#4}{#5}}%
+}
+
+% the \voidbox and its contents should completely disappear
+\def\voidbox#1{\@bsphack\@esphack}
+
+% \flexgreek{lambda} gives \lambda when in math, \itlambda when surrounding text is italic, otherwise \uplambda.
+\protected\def\flexgreek#1{%
+	\ifmath{\csname #1\endcsname}{%
+		\expandafter\ifstrequal\expandafter{\f@shape}{it}{%
+			\ensuremath{\csname it#1\endcsname}}{%	
+			\ensuremath{\csname up#1\endcsname}}%
+	}%
+}
+\def\fxGamma{\flexgreek{Gamma}}
+\def\fxDelta{\flexgreek{Delta}}
+\def\fxTheta{\flexgreek{Theta}}
+\def\fxLambda{\flexgreek{Lambda}}
+\def\fxXi{\flexgreek{Xi}}
+\def\fxPi{\flexgreek{Pi}}
+\def\fxSigma{\flexgreek{Sigma}}
+\def\fxUpsilon{\flexgreek{Upsilon}}
+\def\fxPhi{\flexgreek{Phi}}
+\def\fxPsi{\flexgreek{Psi}}
+\def\fxOmega{\flexgreek{Omega}}
+\def\fxalpha{\flexgreek{alpha}}
+\def\fxbeta{\flexgreek{beta}}
+\def\fxgamma{\flexgreek{gamma}}
+\def\fxdelta{\flexgreek{delta}}
+\def\fxepsilon{\flexgreek{epsilon}}
+\def\fxzeta{\flexgreek{zeta}}
+\def\fxeta{\flexgreek{eta}}
+\def\fxtheta{\flexgreek{theta}}
+\def\fxiota{\flexgreek{iota}}
+\def\fxkappa{\flexgreek{kappa}}
+\def\fxlambda{\flexgreek{lambda}}
+\def\fxmu{\flexgreek{mu}}
+\def\fxnu{\flexgreek{nu}}
+\def\fxxi{\flexgreek{xi}}
+\def\fxpi{\flexgreek{pi}}
+\def\fxrho{\flexgreek{rho}}
+\def\fxsigma{\flexgreek{sigma}}
+\def\fxtau{\flexgreek{tau}}
+\def\fxupsilon{\flexgreek{upsilon}}
+\def\fxphi{\flexgreek{phi}}
+\def\fxchi{\flexgreek{chi}}
+\def\fxpsi{\flexgreek{psi}}
+\def\fxomega{\flexgreek{omega}}
+\def\fxvarepsilon{\flexgreek{varepsilon}}
+\def\fxvartheta{\flexgreek{vartheta}}
+\def\fxvarpi{\flexgreek{varpi}}
+\def\fxvarrho{\flexgreek{varrho}}
+\def\fxvarsigma{\flexgreek{varsigma}}
+\def\fxvarphi{\flexgreek{varphi}}
+\def\fxvarbeta{\flexgreek{varbeta}}
+\def\fxvarkappa{\flexgreek{varkappa}}
+\def\fxbackepsilon{\flexgreek{backepsilon}}
+\def\fxvarbackepsilon{\flexgreek{varbackepsilon}}
+\def\fxdigamma{\flexgreek{digamma}}
+\def\fxeth{\flexgreek{eth}}
+

@@ -1,0 +1,32 @@
+\pdfminorversion=3
+\documentclass{article}
+\usepackage[paperwidth=5cm,paperheight=5cm]{geometry}
+\usepackage{etex}
+\usepackage{tikz}
+\usepackage{environ}
+
+\tikzset{
+	planet/.style={draw,fill,shape=circle,black,scale=.25,inner sep=0,outer sep=0},
+	vec/.style={draw,-latex,black!33},
+	label/.style={font=\scriptsize,anchor=mid west,outer sep=1ex,inner sep=0},
+	id 0/.style={draw=none,fill=black!10,scale=.5},
+%	id 1/.style={}, % for all ids
+}
+
+\NewEnviron{animframe}{
+	\thispagestyle{empty}
+	\begin{tikzpicture}[overlay,remember picture]
+		\node[anchor=center] at (current page.center) {\tikz{
+			\path[use as bounding box] (-.5\paperwidth,.5\paperheight) rectangle (.5\paperwidth,-.5\paperheight);
+			\BODY
+		}};
+	\end{tikzpicture}
+	\clearpage
+}
+
+\newlength{\scalemass}
+\setlength{\scalemass}{3mm}
+
+\begin{document}
+\input{grav_frames}
+\end{document}

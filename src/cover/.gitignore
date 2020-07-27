@@ -1,0 +1,14 @@
+*.aux
+*.log
+*.fdb_latexmk
+cover-front.*
+cover-front-hires.*
+cover-back.*
+cover-cropped.*
+cover-full.*
+*.rs
+*.fls
+*.xmpi
+*.xmpdata
+cover-example.png
+

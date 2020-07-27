@@ -1,0 +1,109 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{thesisinfo}
+
+\RequirePackage{kvoptions}
+\DeclareStringOption[info]{file}
+\DeclareStringOption[]{pdftitleprefix}
+\ProcessKeyvalOptions*
+
+%\RequirePackage{ifempty}
+\RequirePackage{etoolbox,plainstring}
+%\RequirePackage{datetime}
+
+\input{\thesisinfo@file}
+\newcommand{\subtitle}[1]{\def\thesubtitle{#1}}
+
+\expandafter\ifstrempty\expandafter{\thesisinfo@pdftitleprefix}{
+	\def\thetitleprefix{}
+}{
+	\def\thetitleprefix{\thesisinfo@pdftitleprefix\ }
+}
+\expandafter\ifstrempty\expandafter{\thesissubtitle}{
+	\gdef\thefulltitle{\thesistitle}
+	\gdef\thefullpdftitle{\thetitleprefix\thesistitle}
+	\gdef\thexmptitle{\thetitleprefix\thesistitle}
+}{
+	\def\thefulltitle{\thesistitle\ --- \textit{\thesissubtitle}}
+	\gdef\thefullpdftitle{\thetitleprefix\thesistitle\ -{}- \thesissubtitle}
+	\gdef\thexmptitle{\thetitleprefix\thesistitle\ -{}- \thesissubtitle}
+}
+
+\def\stripleadingzero#1{\ifnumequal{#1}{0}{}{#1}}
+\def\addleadingzero#1{\ifnumless{#1}{10}{0}{}#1}
+
+% format yyyy-mm-dd
+\def\@extractyear#1-#2-#3.{\stripleadingzero #1}
+\def\@extractmonth#1-#2-#3.{\stripleadingzero #2}
+\def\@extractday#1-#2-#3.{\stripleadingzero #3}
+\edef\thesisyear{\expandafter\@extractyear\thesisdate.}
+\edef\thesismonth{\expandafter\@extractmonth\thesisdate.}
+\edef\thesisday{\expandafter\@extractday\thesisdate.}
+\ifnumgreater{\thesisday}{1000}{
+	% assume the input format was in dd-mm-yyyy instead of yyyy-mm-dd
+	\PackageWarning{thesisinfo}{Please specify \string\thesisdate{} in ISO 8601 format (yyyy-mm-dd)}{}
+	\let\oldday\thesisday
+	\edef\thesisday{\thesisyear}
+	\edef\thesisyear{\oldday}
+}{}
+\edef\fullthesisdate{\addleadingzero{\thesisday}-\addleadingzero{\thesismonth}-\thesisyear}
+
+\def\@extracthour#1:#2.{#1}
+\def\@extractminute#1:#2.{#2}
+\edef\thesistimedutch{\expandafter\@extracthour\thesistime..\expandafter\@extractminute\thesistime.}
+
+% dutch support for datetime
+\providecommand*{\dayofweeknameiddutch}[1]{%
+	\ifcase#1\relax\or zondag\or maandag\or dinsdag\or woensdag\or donderdag\or vrijdag\or zaterdag\fi}
+\providecommand*{\shortdayofweeknameiddutch}[1]{%
+	\ifcase#1\relax\or zo\or ma\or di\or wo\or do\or vr\or za\fi}
+
+\PassOptionsToPackage{dayofweek,long,raise,24hr}{datetime}
+\AtEndPreamble{
+	\@ifpackageloaded{datetime}{
+		\newdate{thesis}{\thesisday}{\thesismonth}{\thesisyear}
+		\renewcommand{\dateseparator}{-}
+		\def\fullthesisdate{\protect\displaydate{thesis}}
+		\def\thesismonthname{\expandafter\monthname\expandafter[\thesismonth]}
+	}{}
+}
+
+{\let~\space\let\ \space\xdef\thesisauthorplain{\thesisauthor}}
+
+\AtBeginDocument{
+	\providecommand*{\datedutch}{}% ...if not supplied by babel
+	\@ifpackageloaded{datetime}{
+		\gappto{\datedutch}{%
+			\renewcommand{\formatdate}[3]{%
+				\@day=#1\relax\@month=#2\relax\@year=#3\relax%
+				\ifshowdow\dayofweekname{\number\@day}{\number\@month}{\number\@year}\space \fi%
+				\number\@day~\monthnamedutch[\@month]\space \number\@year%
+			}%
+		}
+	}{}
+	\title{\thesisinfo@pdftitleprefix\thesistitle}
+	\subtitle{\thesissubtitle}
+	\author{\thesisauthor}
+	\date{\fullthesisdate}
+	\ifx\hypersetup\undefined\else\hypersetup{
+		pdftitle={\thefullpdftitle},
+		pdfauthor={\thesisauthorplain},
+	}\fi
+}
+\RequirePackage{newfile}
+\newoutputstream{xmpdata}
+\newcommand{\writexmpdata}{
+	\ifdef{\pdfstringdef}{}{\PackageError{thesisinfo}{Hyperref is required to generate \jobname.xmpdata}{}}
+	\begin{plainstring}
+		\openoutputfile{\jobname.xmpdata}{xmpdata}
+		\pdfstringdef\xmpstring{\thexmptitle}		\addtostream{xmpdata}{\string\Title{\xmpstring}}
+		\pdfstringdef\xmpstring{\thesisauthorplain}	\addtostream{xmpdata}{\string\Author{\xmpstring}}
+													\addtostream{xmpdata}{\string\Org{University of Twente}}
+		\pdfstringdef\xmpstring{\thesisDOI}			\addtostream{xmpdata}{\string\Doi{\xmpstring}}
+		\pdfstringdef\xmpstring{\thesisdate}		\addtostream{xmpdata}{\string\CoverDate{\xmpstring}}
+		\pdfstringdef\xmpstring{\thesisdate}		\addtostream{xmpdata}{\string\CoverDisplayDate{\xmpstring}}
+		\closeoutputstream{xmpdata}
+	\end{plainstring}
+}
+
+\AtEndPreamble{\writexmpdata}
+

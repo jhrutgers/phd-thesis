@@ -1,0 +1,91 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{flippage}
+
+\newif\ifdigital\digitalfalse
+\DeclareOption{digital}{\digitaltrue}
+\ProcessOptions
+
+\RequirePackage{everyshi,etoolbox,adjustbox,refcount}
+
+\ifdigital
+	\xdef\pdfpageattrbase{\the\pdfpageattr}
+	\EveryShipout{
+		% determine name of the rotate command for the current page
+		\edef\therotatepage{\thepage @dorotate}
+		% determine attribute of current page
+		\edef\pdfthispageattr{%
+			\pdfpageattrbase
+			\expandafter\ifcsdef\expandafter{\therotatepage}{%
+				/Rotate \expandafter\csname\therotatepage\endcsname%
+			}{}
+		}
+		% set attribute
+		\global\pdfpageattr\expandafter{\pdfthispageattr}
+	}
+\fi
+
+\newcounter{rotatelbl}
+\newcommand*{\flippagecalc}[2]{%
+	\stepcounter{rotatelbl}%
+	% determine unique label name for this object/page
+	\expandafter\edef\expandafter\therotatelbl{\number\c@rotatelbl @rotate}%
+	% create label
+	\expandafter\label\expandafter{\therotatelbl}%
+	% extract page number from label
+	\edef\therotatelblpage{\expandafter\getpagerefnumber\expandafter{\therotatelbl}}%
+	% determine amount of rotation
+	\edef#1{%
+		\ifnumequal{#2}{90}{%
+			\expandafter\ifnumodd\expandafter{\therotatelblpage}{90}{270}}%
+			{#1}%
+	}%
+}
+
+\newcommand*{\flippage}[1][90]{%
+	\flippagecalc\rotatepage{#1}%
+	% write command to aux to rotate the page of this label
+	\edef\rotatetoaux{%
+		\noexpand\string\noexpand	\expandafter%
+		\noexpand\string\noexpand	\gdef%
+		\noexpand\string\noexpand	\csname%
+									\therotatelblpage @dorotate%
+		\noexpand\string\noexpand	\endcsname%
+									{\rotatepage}%
+	}%
+	\expandafter\write\expandafter\@auxout\expandafter{\rotatetoaux}%
+}
+
+\newenvironment{flipfigure}{%
+	\begin{figure}[!p]%
+	\flippage\relax%
+	\begin{adjustbox}{
+		minipage=\textheight,
+		rotate=\rotatepage,center}%
+	\centering%
+}{%
+	\end{adjustbox}%
+	\end{figure}%
+}
+
+% argument: b=normal box, p=full page
+\newenvironment{landscape*}[1][b]{%
+	\let\flip@wrap\relax%
+	\ifstrequal{#1}{p}{\let\flip@wrap\clearpage}{}%
+	\flip@wrap%
+	\flippagecalc\flip@rotatebox{90}%
+	\edef\boxargs{rotate=\flip@rotatebox}%
+	\def\beginadjustbox{\begin{adjustbox}}%
+	\expandafter\beginadjustbox\expandafter{\boxargs}%
+}{%
+	\end{adjustbox}%
+	\flip@wrap%
+}
+
+% argument: b=normal box, p=full page
+\newenvironment{landscape}[1][b]{%
+	\begin{landscape*}[#1]%
+	\flippage\relax%
+}{%
+	\end{landscape*}%
+}
+

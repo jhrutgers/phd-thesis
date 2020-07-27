@@ -1,0 +1,152 @@
+\setaachaptext[51]{an appendix presenting atomic-free atomics}
+\chapter{Atomic once}
+
+Atomic set a value, safe for any participating threads, guarantees to set once.
+Only based on read/write of shared memory.
+
+%\vspace{2\baselineskip}
+%\begin{lstcode}[caption={Outline of a C++ implementation},label=lst:atomic:cpp]
+%class EnterOnce {
+%public:
+%	EnterOnce(bool set=false){
+%		if(set) m_entry=true;
+%			else Reset();
+%	}
+%	bool IsTouched() const { return (bool)m_entry; }
+%	operator bool() const {  return IsTouched(); }
+%protected:
+%	void Reset() {			 memset(&m_entry,0,sizeof(m_entry)); }
+%
+%#ifdef AVOID_ATOMIC // consider atomic operations as extremely expensive
+%	typedef uintptr_t id_t;
+%	typedef uint8_t sid_t;
+%	static const sid_t ID_IN_CS=(sid_t)-1;
+%	
+%	bool Entry(){
+%		id_t id=GetID();
+%		sid_t sid;
+%
+%		// lock step: n to {1,2}
+%		m_entry.step1=id;
+%		if(unlikely(m_entry.step2!=0))
+%			return false;
+%		m_entry.step2=id;
+%
+%		if(likely(m_entry.step1==id)){
+%			sid=1;
+%			m_entry.step3=sid;
+%		}else{
+%			sid=2;
+%			if(m_entry.step3.cas(0,sid)!=0)
+%				return false;
+%		}
+%
+%		// lock m_entry.step: {1,2} to 1
+%wait_step4:
+%		switch(m_entry.step4){
+%		case ID_IN_CS:
+%			return false;
+%		case 0:
+%			m_entry.step4=sid;
+%			if(likely(m_entry.step3==sid)){
+%				m_entry.step4=ID_IN_CS;
+%				return true;
+%			}else{
+%				m_entry.step4=0;
+%				return false;
+%			}
+%		default:
+%			goto wait_step4;
+%		}
+%	}
+%
+%private:
+%	id_t GetID(){
+%		// generate some thread-unique value
+%		int dummy=0;
+%		id_t id=(id_t)&dummy;
+%		return id;
+%	}
+%	
+%	struct {
+%		atomic_t<id_t> step1,step2;
+%		atomic_t<sid_t> step3,step4;
+%		operator bool() const { return step1!=0; }
+%		void operator=(const bool rhs){ step1=1; }
+%	} m_entry;
+%
+%#else // consider atomic operations as cheap
+%	bool Entry(){
+%		return __sync_bool_compare_and_swap(&m_entry,false,true);
+%	}
+%private:
+%	bool m_entry;
+%#endif // AVOID_ATOMIC
+%};
+%\end{lstcode}
+
+\vspace{2\baselineskip}
+\begin{lstcode}[language=Promela,caption={Promela implementation for verification},label=lst:atomic:promela]
+#define PROCS	6
+#define MAX_ID	(PROCS+1)
+
+byte step1=0;
+byte step2=0;
+byte step3=0;
+byte step4=0;
+byte in_cs=0;
+byte proc_done=0;
+
+proctype worker(byte id) {
+
+	////////////////////////////////////
+	// Enter lock
+
+    // lock step: n to {1,2}
+    step1=id;
+    if  
+    :: step2==0 -> step2=id
+    :: else -> goto done
+    fi; 
+    if
+    :: step1==id -> step3=id
+    :: else ->  
+		if  
+		:: step3==0 -> step3=id
+		:: else -> goto done
+		fi  
+    fi; 
+
+    // lock step: {1,2} to 1
+    if
+    :: step4==MAX_ID -> goto done
+    :: step4==0 -> step4=id
+    fi; 
+    if  
+    :: step3==id -> step4=MAX_ID
+    :: else -> step4=0; goto done
+    fi; 
+	
+	////////////////////////////////////
+	// Critical section
+
+    printf("%d in cs\n",id);
+    in_cs++;
+    assert(in_cs==1);
+done:
+    proc_done++
+}
+
+init { 
+	byte procs=0;
+    atomic{
+        do  
+        :: procs<PROCS -> procs++; run worker(procs)
+        :: procs>=1 && procs<PROCS -> break
+        :: procs>=PROCS -> break;
+        od; 
+    }
+    in_cs==1&&proc_done==procs;
+}
+\end{lstcode}
+

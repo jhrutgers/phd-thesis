@@ -1,0 +1,66 @@
+\inputonce{figures/arch_style}%
+\begin{tikzpicture}[
+	component/.append style={minimum size=3em},
+	tile/.style={core,text width=6ex},
+	memory/.append style={text width=10ex,minimum height=2em},
+	peripheral/.append style={text width=10ex,minimum height=2em},
+]
+
+\node[tile,text width=8ex]	(mb0)											{\emph{master} tile 0};
+\node[tile,anchor=west]		(mb1) at ($(mb0.east)+(.5\portablefigunit,0)$)	{tile 1};
+\node[tile,anchor=west] 	(mb2) at ($(mb1.east)+(.5\portablefigunit,0)$) 	{tile 2};
+\node[tile,anchor=west] 	(mb3) at ($(mb2.east)+(.5\portablefigunit,0)$) 	{tile 3};
+\node[tile,anchor=west] 	(mb4) at ($(mb3.east)+(.5\portablefigunit,0)$) 	{tile 4};
+\node[tile,anchor=west] 	(mb5) at ($(mb4.east)+(.5\portablefigunit,0)$) 	{tile 5};
+\node[tile,anchor=west] 	(mb6) at ($(mb5.east)+(.5\portablefigunit,0)$) 	{tile 6};
+\node[tile,anchor=west] 	(mb7) at ($(mb6.east)+(.5\portablefigunit,0)$) 	{tile 7};
+
+\begin{scope}[connection/.append style={black!75}]
+	% master to all
+	\draw[bidirectional connection] (mb0.90) |- ++($(0,\portablefigunit)+(\portablefigunit,0\pgflinewidth)$) -| (mb1.110);
+	\draw[bidirectional connection] (mb0.90) |- ++($(0,\portablefigunit)+(\portablefigunit,2\pgflinewidth)$) -| (mb2.90);
+	\draw[bidirectional connection] (mb0.90) |- ++($(0,\portablefigunit)+(\portablefigunit,4\pgflinewidth)$) -| (mb3.90);
+	\draw[bidirectional connection] (mb0.90) |- ++($(0,\portablefigunit)+(\portablefigunit,6\pgflinewidth)$) -| (mb4.90);
+	\draw[bidirectional connection] (mb0.90) |- ++($(0,\portablefigunit)+(\portablefigunit,8\pgflinewidth)$) -| (mb5.90);
+	\draw[bidirectional connection] (mb0.90) |- ++($(0,\portablefigunit)+(\portablefigunit,10\pgflinewidth)$) -| (mb6.90);
+	\draw[bidirectional connection] (mb0.90) |- ++($(0,\portablefigunit)+(\portablefigunit,12\pgflinewidth)$) -| (mb7.70);
+	
+	% neighbors
+	\draw[bidirectional connection] (mb1.70) |- ++(\portablefigunit,\portablefigunit) -| (mb2.110);
+	\draw[bidirectional connection] (mb2.70) |- ++(\portablefigunit,\portablefigunit) -| (mb3.110);
+	\draw[bidirectional connection] (mb3.70) |- ++(\portablefigunit,\portablefigunit) -| (mb4.110);
+	\draw[bidirectional connection] (mb4.70) |- ++(\portablefigunit,\portablefigunit) -| (mb5.110);
+	\draw[bidirectional connection] (mb5.70) |- ++(\portablefigunit,\portablefigunit) -| (mb6.110);
+	\draw[bidirectional connection] (mb6.70) |- ++(\portablefigunit,\portablefigunit) -| (mb7.110);
+\end{scope}
+
+% memory
+\begin{scope}[connection/.append style={black}]
+	\node[memory,anchor=north] (mem) at ($(mb0.south west)!.25!(mb7.south east)+(0,-3\portablefigunit)$) {\acs{SDRAM}};
+	\draw[connection] (mb0.290) |- ++($(   \portablefigunit,-1.6\portablefigunit)+(0,15\pgflinewidth)$) -| (mem.north);
+	\draw[connection] (mb1.290) |- ++($(0,                  -1.6\portablefigunit)+(0,13\pgflinewidth)$) -| (mem.north);
+	\draw[connection] (mb2.250) |- ++($(-.8\portablefigunit,-1.6\portablefigunit)+(0,5\pgflinewidth)$) -| (mem.north);
+	\draw[connection] (mb3.250) |- ++($(  -\portablefigunit,-1.6\portablefigunit)+(0,7\pgflinewidth)$) -| (mem.north);
+	\draw[connection] (mb4.250) |- ++($(  -\portablefigunit,-1.6\portablefigunit)+(0,9\pgflinewidth)$) -| (mem.north);
+	\draw[connection] (mb5.250) |- ++($(  -\portablefigunit,-1.6\portablefigunit)+(0,11\pgflinewidth)$) -| (mem.north);
+	\draw[connection] (mb6.250) |- ++($(  -\portablefigunit,-1.6\portablefigunit)+(0,13\pgflinewidth)$) -| (mem.north);
+	\draw[connection] (mb7.250) |- ++($(  -\portablefigunit,-1.6\portablefigunit)+(0,15\pgflinewidth)$) -| (mem.north);
+\end{scope}
+
+% periphs
+\begin{scope}[connection/.append style={black!50}]
+	\node[peripheral,anchor=north] (periphs) at ($(mb0.south west)!.75!(mb7.south east)+(0,-3\portablefigunit)$) {\acs{UART}};
+	\draw[connection] (mb0.250) |- ++($( \portablefigunit,-1.6\portablefigunit)+(0,-4\pgflinewidth)$) -| (periphs.north);
+	\draw[connection] (mb1.250) |- ++($( \portablefigunit,-1.6\portablefigunit)+(0,-2\pgflinewidth)$) -| (periphs.north);
+	\draw[connection] (mb2.290) |- ++($( \portablefigunit,-1.6\portablefigunit)+(0,0\pgflinewidth)$) -| (periphs.north);
+	\draw[connection] (mb3.290) |- ++($( \portablefigunit,-1.6\portablefigunit)+(0,2\pgflinewidth)$) -| (periphs.north);
+	\draw[connection] (mb4.290) |- ++($( \portablefigunit,-1.6\portablefigunit)+(0,4\pgflinewidth)$) -| (periphs.north);
+	\draw[connection] (mb5.290) |- ++($(0                ,-1.6\portablefigunit)+(0,6\pgflinewidth)$) -| (periphs.north);
+	\draw[connection] (mb6.290) |- ++($(-\portablefigunit,-1.6\portablefigunit)+(0,4\pgflinewidth)$) -| (periphs.north);
+	\draw[connection] (mb7.290) |- ++($(-\portablefigunit,-1.6\portablefigunit)+(0,6\pgflinewidth)$) -| (periphs.north);
+\end{scope}
+
+%\node[plain label,wrap text,fontB,outer sep=1ex,anchor=south] at (current bounding box.north) {latency-tolerant core-to-core};
+%\node[plain label,wrap text,draw,fontB,anchor=north] at ($(mem.north east)!.5!(periphs.north west)$) {latency-critical core-to-memory};
+
+\end{tikzpicture}%

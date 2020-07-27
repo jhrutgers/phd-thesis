@@ -1,0 +1,156 @@
+% vim:spelllang=nl:spell
+\documentclass[a4paper,11pt,oneside,final]{memoir}
+
+\usepackage[file=src/info]{thesisinfo}
+\usepackage{etex,etoolbox}
+\usepackage[dutch]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage{datetime}
+\usepackage[protrusion=true,expansion=true,stretch=10,shrink=10,babel]{microtype}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,stmaryrd,textcomp}
+\usepackage{MyriadPro}
+\usepackage[fullfamily,textosf,mathlf,minionint,footnotefigures]{MinionPro}
+\renewcommand\sfdefault{MyriadPro-LF}
+\usepackage{url,ragged2e}
+\urlstyle{tt}
+\usepackage{hyperref}
+
+\hypersetup{
+	pdfborder={0 0 0},
+	colorlinks=false,
+}
+
+\usepackage[acronym,smallcaps,nonumberlist,hyperfirst=false,shortcuts]{glossaries}
+\usepackage{wordfonts,ifempty}
+\input{src/acronyms}
+
+\figureversion{text,proportional}
+\pagestyle{empty}
+
+\setlength\parindent{0ex}
+\abnormalparskip{1\baselineskip plus .2\baselineskip minus .2\baselineskip}
+
+\newcommand{\letterdraft}[2][]{%
+	Enschede, \the\day\ \monthname\ \the\year \\
+	
+	Geachte #2,
+
+	Hartelijk dank dat u zitting wilt nemen in mijn promotiecommissie.
+	Hierbij ontvangt u het manuscript van mijn proefschrift, getiteld:
+
+	\thefulltitle
+
+	De verdediging is gepland op \thedate\ om \thesistimedutch\ uur.
+	U zult binnenkort van het College voor Promoties een schrijven ontvangen betreffende de procedure.
+	Ik verwacht dat er uiterlijk begin maart 2014 een beslissing over goedkeuring genomen dient te worden.
+
+
+	Mocht u vragen of opmerkingen hebben omtrent dit werk, dan kunt u met mij contact opnemen.
+	\ifstrempty{#1}{Tevens ben ik bereid om bij u langs te komen voor een inhoudelijke discussie.}{}
+
+	Met vriendelijke groet,
+
+	Jochem Rutgers \strut\\
+	\begin{tabular}{@{}ll}
+	\strut tel.\@ & \ifstrempty{#1}{0}{+31\,}6\,1292\,5775 \\
+	e-mail & \href{mailto:j.h.rutgers@utwente.nl}{j.h.rutgers@utwente.nl} \\
+	\end{tabular}
+
+
+	\clearpage%
+}
+
+\newcommand{\letterfinal}[2][]{%
+	Enschede, \the\day\ \monthname\ \the\year \\
+	
+	Geachte #2,
+
+	Bij deze stuur ik een exemplaar van mijn proefschrift (met stellingen), getiteld:
+
+	\thefulltitle
+
+	Ik kijk uit naar de verdediging op \thedate.
+
+	Met vriendelijke groet,
+
+	Jochem Rutgers \strut\\
+	\begin{tabular}{@{}ll}
+	\strut tel.\@ & \ifstrempty{#1}{0}{+31\,}6\,1292\,5775 \\
+	e-mail & \href{mailto:j.h.rutgers@utwente.nl}{j.h.rutgers@utwente.nl} \\
+	\end{tabular}
+
+
+	\clearpage%
+}
+
+\newcommand{\letterctit}{%
+	Park de Kotten 102 \\
+	7522 EE {} ENSCHEDE \\
+	tel.\@: 06\,1292\,5775 \\
+	e-mail: \href{mailto:j.h.rutgers@alumnus.utwente.nl}{j.h.rutgers@alumnus.utwente.nl}
+
+	Universiteit Twente \\
+	Centre for Telematics and Information Technology (CTIT) \\
+	P.O. Box 217  \\
+	7500 AE {} ENSCHEDE
+
+	Enschede, \the\day\ \monthname\ \the\year \\
+	
+	Geachte heer/mevrouw,
+
+	Bij deze stuur ik u een exemplaar van mijn proefschrift.
+	Zoals ook in de colofon is te vinden, is het CTIT-thesisnummer 14-292.
+	De verdediging is gepland op \thedate.
+
+	Met vriendelijke groet,
+
+	Jochem Rutgers
+
+
+	\clearpage%
+}
+
+\newcommand{\summarylib}{%
+	{%
+	\renewcommand{\baselinestretch}{1.4}
+	\selectfont
+
+	\textbf{\thefulltitle}
+
+	Common many-core processors contain tens of cores and distributed memory.
+	Compared to a multicore system, which only has a few tightly coupled cores sharing a single bus and memory, several complex problems arise.
+	Notably, many cores require many parallel tasks to fully utilize the cores, and communication happens in a distributed and decentralized way.
+	Therefore, programming such a processor requires the application to exhibit concurrency.
+	In contrast to a single-core application, a concurrent application has to deal with memory state changes with an observable (non-deterministic) intermediate state.
+	The complexity introduced by these problems makes programming a many-core system with a single-core-based programming approach notoriously hard.
+
+	The central concept of this thesis is that abstractions, which are related to (many-core) programming, are structured in a single platform model.
+	A platform is a layered view of the hardware, a memory model, a concurrency model, a model of computation, and compile-time and run-time tooling.
+	Then, a programming model is a specific view on this platform, which is used by a programmer.
+	In this view, some details can be hidden from the programmer's perspective, some details cannot.
+	For example, an operating system presents an infinite number of parallel virtual execution units to the application whilst it hides details regarding scheduling.
+	On the other hand, a programmer usually has balance workload among threads by hand.
+
+	This thesis presents modifications to different abstraction layers of a many-core architecture, in order to make the system as a whole more efficient, and to reduce the programming complexity.
+	These modifications influence other abstractions in the platform, and especially the programming model.
+	Therefore, this thesis applies co-design on all models.
+	Notably, co-design of the memory model, concurrency model, and model of computation is required for a scalable implementation of lambda-calculus.
+	Moreover, only the combination of requirements of the many-core hardware from one side and the concurrency model from the other leads to a memory model abstraction.
+	Hence, this thesis shows that to cope with the current trends in many-core architectures from a programming perspective, it is essential and feasible to inspect and adapt all abstractions collectively.
+
+	}\selectfont\clearpage%
+}
+
+\begin{document}
+\letterdraft{heer Van de Pol}
+\letterdraft{heer Broenink}
+\letterdraft{heer Corporaal}
+\letterdraft{heer Bertels}
+\letterdraft[nee]{heer Stroobandt}
+\letterfinal{heer Corporaal, beste Henk}
+\letterfinal{heer Bertels}
+\letterfinal[nee]{heer Stroobandt}
+\letterctit
+\summarylib
+\end{document}

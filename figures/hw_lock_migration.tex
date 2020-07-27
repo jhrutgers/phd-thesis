@@ -1,0 +1,102 @@
+%\pgfplotstableread{data/migration.dat}\mig
+\begin{tikzpicture}
+\begin{axis}[
+	xmin=0,
+	xmax=1.001,
+	ymin=0,
+	enlargelimits=false,
+	ymajorgrids=true,
+	xmajorgrids=true,
+	yminorgrids=true,
+	xminorgrids=true,
+	minor x tick num=1,
+	minor y tick num=1,
+	ytick={0,100,...,500},
+	xlabel={Mutex locality},
+	ylabel={\strut Average lock time of free mutex (\si{\micro\second})},
+	every axis legend/.append style={at={(0.02,0.0317)},anchor=south west,nodes={right},draw=black!50},
+	height=.6\linewidth,
+	width=.95\linewidth,
+	legend style={nodes={inner xsep=1ex}},
+]
+\def\hidebounds{bounds}
+\ifx\hidebounds\undefined
+	% measurement busy
+	\addlegendentry{dist. lock, busy-wait process}
+	\addplot function[raw gnuplot]{
+		plot [x=0:1] "data/hw_lock_migration.dat" using (1-$1):2 every :::0::0;
+		unset table;system("for f in *.pgf-plot.table; do `which gsed > /dev/null && /bin/echo -n g`sed -i 's/^.* [ou]$/\#undefined point/g' $f; done");
+	};
+	% measurement sleep
+	\addlegendentry{dist. lock, idle process}
+	\addplot function[raw gnuplot]{
+		plot [x=0:1] "data/hw_lock_migration.dat" using (1-$1):2 every :::1::1;
+		unset table;system("for f in *.pgf-plot.table; do `which gsed > /dev/null && /bin/echo -n g`sed -i 's/^.* [ou]$/\#undefined point/g' $f; done");
+	};
+	\fi
+% measurement bakery
+\addlegendentry{bakery}
+\addplot+[only marks] function[raw gnuplot]{
+	plot [x=0:1] "data/hw_lock_migration.dat" using (1-$1):2 every :::2::2;
+	unset table;system("for f in *.pgf-plot.table; do `which gsed > /dev/null && /bin/echo -n g`sed -i 's/^.* [ou]$/\#undefined point/g' $f;  done");
+};
+% calculation application's average
+% to find load of application:
+% 1) time consumed by worker = (last dump time)-(time consumed of task daemon @1)-(boot time of first kernel)
+% 2) load = (time consumed by worker) / (execution time of parallel phase)
+% radiosity: load = ((308070)-(110439)-(7.329)) / (251657) = 0.79
+% volrend: load = ((259300)-(211580)-(18843)) / (35244) = 0.82
+% raytrace: load = ((70020)-(32211)-(9523)) / (30437) = 0.93
+% fluidanimate: load = ((134280)-(108706)-(13975)) / (39026) = 0.30
+% average: load = 0.71
+\newcommand{\avgload}{0.71}
+\addlegendentry{distributed lock}
+%	system("make -C data"); % put inside function
+\addplot+[only marks] function[raw gnuplot]{
+	load=\avgload;
+	plot [x=0:1] "data/hw_lock_migration_avg.dat" using (1-($1*(1-load)+$3*load)):($2*(1-load)+$4*load);
+	unset table;system("for f in *.pgf-plot.table; do `which gsed > /dev/null && /bin/echo -n g`sed -i 's/^.* [ou]$/\#undefined point/g' $f; done");
+};
+\ifx\hidebounds\undefined
+	% regression busy
+	\addplot function[raw gnuplot]{
+		f(x)=m*x+b;
+		fit f(x) 'data/hw_lock_migration.dat' using (1-$1):2 every :::0::0 via m,b;
+		plot [x=0:1] f(x);
+	};
+	% regression sleep
+	\addplot function[raw gnuplot]{
+		f(x)=m*x+b;
+		fit f(x) 'data/hw_lock_migration.dat' using (1-$1):2 every :::1::1 via m,b;
+		plot [x=0:1] f(x);
+	};
+\fi
+% regression bakery
+\addplot+[chart color 1,no marks] function[raw gnuplot]{
+	f(x)=m*x+b;
+	fit f(x) 'data/hw_lock_migration.dat' using (1-$1):2 every :::2::2 via m,b;
+	plot [x=0:1] f(x);
+};
+% regression application's average
+\addplot+[chart color 2,no marks] function[raw gnuplot]{
+	load=\avgload;
+	f(x)=m*x+b;
+	fit f(x) 'data/hw_lock_migration_avg.dat' using (1-($1*(1-load)+$3*load)):($2*(1-load)+$4*load) via m,b;
+	plot [x=0:1] f(x);
+};
+
+\newcommand{\cutheight}{1000}
+\draw[thick,draw=chart color 3,densely dashed]
+	(axis cs:0.7058451793,0) -- +(axis cs:0,\cutheight) ++(axis cs:0,480) ++(axis cs:-0.01,0)
+		\plotlabelnode[inner sep=0,outer sep=0,anchor=base east,rotate=90] {\theapp{radiosity}}
+	(axis cs:0.6642005099,0) -- +(axis cs:0,\cutheight) ++(axis cs:0,480) ++(axis cs:-0.01,0)
+		\plotlabelnode[inner sep=0,outer sep=0,anchor=base east,rotate=90] {\theapp{volrend}}
+	(axis cs:0.9477971122,0) -- +(axis cs:0,\cutheight) ++(axis cs:0,480) ++(axis cs:-0.01,0)
+		\plotlabelnode[inner sep=0,outer sep=0,anchor=base east,rotate=90] {\theapp{raytrace}}
+	(axis cs:0.906436294,0)  -- +(axis cs:0,\cutheight) ++(axis cs:0,480) ++(axis cs:-0.01,0)
+		\plotlabelnode[inner sep=0,outer sep=0,anchor=base east,rotate=90] {\theapp{fluidanimate}};
+\draw[thick,draw=chart color 3]
+	(axis cs:0.47,0) -- +(axis cs:0,\cutheight) ++(axis cs:0,180) -- ++(axis cs:-0.025,0)
+		\plotlabelnode[inner sep=0,outer sep=0,anchor=mid east] {break-even};
+\end{axis}
+\end{tikzpicture}%
